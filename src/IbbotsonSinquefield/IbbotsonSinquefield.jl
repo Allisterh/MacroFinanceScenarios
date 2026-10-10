@@ -6,18 +6,22 @@ export Except, Affine, Invertible, Demean, Standardize
 export AR1, fit_ar1, unconditional_mean, unconditional_std
 export Scenarios, scenario_years, is_coefficients, issm_bootstrap_matrix
 export simulate_var_bootstrapped_res, returns_from_components
+export save_issm_params, load_issm_params, save_residuals, load_residuals
 
+using CSV
 using Dates
-using LinearAlgebra: I, diag, eigvals, mul!
+using LinearAlgebra: Diagonal, I, diag, eigvals, mul!
 using Random
 using Statistics
 using TimeSeries
 using XLSX
+using YAML
 
 include(joinpath(@__DIR__, "..", "common", "bond_returns.jl"))
 include(joinpath(@__DIR__, "data.jl"))
 include(joinpath(@__DIR__, "ar1.jl"))
 include(joinpath(@__DIR__, "simulate.jl"))
 include(joinpath(@__DIR__, "transform.jl"))
+include(joinpath(@__DIR__, "io.jl"))
 
 end

@@ -1,10 +1,12 @@
 using Test
 using Statistics
+import Plots
 using StatsBase: autocor, kurtosis, skewness
 using MacroFinanceScenarios
 using MacroFinanceScenarios.IbbotsonSinquefield: Scenarios
 using MacroFinanceScenarios.ScenariosEvaluation
 using MacroFinanceScenarios.EDA: print_table
+using DataFrames: DataFrame, Not
 
 @testset "ScenariosEvaluation" begin
     using Random: Xoshiro
@@ -29,15 +31,38 @@ using MacroFinanceScenarios.EDA: print_table
         all_pm = path_moments(sc)
         @test first.(all_pm) == [:a, :b, :c]
         @test last(all_pm[3]) == pm
+
+        hist = DataFrame(variable = ["c", "a"], mean = [0.07, 0.03], std = [0.17, 0.02],
+                         skewness = [-0.5, 0.1], ex_kurtosis = [1.0, 0.0], ar1 = [0.0, 0.6],
+                         min = [-0.4, 0.0])
+        ph = path_moments(sc, :c; hist)
+        @test propertynames(ph) == [:statistic, :historical, :mean, :p5, :p25, :p50, :p75, :p95]
+        @test ph.historical == [0.07, 0.17, -0.5, 1.0, 0.0]
+        @test ph[:, Not(:historical)] == pm
+        @test all(ismissing, path_moments(sc, :b; hist).historical)
+        @test last(path_moments(sc; hist)[1]).historical == [0.03, 0.02, 0.1, 0.0, 0.6]
     end
 
-    @testset "mean_correlations" begin
-        mc = mean_correlations(sc)
-        @test mc.variable == ["a", "b", "c"]
-        C = Matrix(mc[:, 2:end])
-        @test C ≈ mean(cor(permutedims(data[:, :, s])) for s in 1:n_scen)
-        @test all(C[i, i] ≈ 1 for i in 1:3)
-        @test C[1, 2] ≈ 0.01 / sqrt(0.05^2 + 0.01^2) atol = 0.03   # b = noise + 0.5a
+    @testset "scenarios_correlations" begin
+        # 2 paths of 3 variables, correlations checked by hand.
+        x = [1.0, 2.0, 3.0, 4.0]
+        p1 = permutedims(hcat(x, 2x, -x))                    # cor(a, b) = 1, cor(a, c) = -1
+        p2 = permutedims(hcat(x, [1.0, 3.0, 2.0, 4.0], x))   # cor(a, b) = 0.8, cor(a, c) = 1
+        small = Scenarios(cat(p1, p2; dims = 3), [:a, :b, :c], 2026)
+        hist = DataFrame(variable = ["c", "a"], c = [1.0, 0.25], a = [0.25, 1.0])
+        t = scenarios_correlations(small; hist, probs = (0.0, 1.0))
+        @test t.variable == ["a", "b", "c"]
+        @test propertynames(t) == [:variable, :a, :b, :c]
+        @test t.a == ["1", "0.90 (0.80, 1.00)", "0.00 (-1.00, 1.00)"]
+        @test t.c[1] == "0.25"                               # hist(a, c)
+        @test t.b[1] == "" && t.c[2] == ""                   # b not in hist
+        @test t.b[2] == "1" && t.c[3] == "1"
+        @test t.b[3] == "-0.10 (-1.00, 0.80)"                # cor(b, c): -1 and 0.8
+        @test all(==(""), scenarios_correlations(small; digits = 1)[1, [:b, :c]])
+        @test scenarios_correlations(small; digits = 1).a[2] == "0.9 (0.8, 1.0)"
+        # Default percentiles on the random scenarios: mean matches the per-path average.
+        m = mean(cor(permutedims(data[:, :, s]))[2, 1] for s in 1:n_scen)
+        @test startswith(scenarios_correlations(sc).a[2], string(round(m; digits = 2)))
     end
 
     @testset "horizon values and percentiles" begin
@@ -48,6 +73,18 @@ using MacroFinanceScenarios.EDA: print_table
         @test horizon_values(X, 1) ≈ X[1, :]
         @test_throws ArgumentError horizon_values(X, T + 1)
         @test_throws ArgumentError horizon_values(X, 5; kind = :foo)
+        # simple = true: exp(·) − 1 per path, before any summary.
+        @test horizon_values(X, 5; simple = true) ≈ expm1.(horizon_values(X, 5))
+        @test horizon_values(X, 5; kind = :level, simple = true) ≈ expm1.(X[5, :])
+        @test_throws ArgumentError horizon_values(X, 5; kind = :wealth, simple = true)
+        hs = horizon_percentiles(sc; vars = [:c], horizons = [10], simple = true)
+        hl = horizon_percentiles(sc; vars = [:c], horizons = [10])
+        @test hs.mean[1] ≈ mean(expm1.(horizon_values(sc[:c], 10)))
+        @test hs.mean[1] > expm1(hl.mean[1])                 # Jensen: mean does not commute
+        # Percentiles commute (up to the interpolation between order statistics).
+        @test hs.p50[1] ≈ expm1(hl.p50[1]) rtol = 1e-4
+        ext = horizon_percentiles(sc; vars = [:c], horizons = [10], probs = [0.0, 1.0], simple = true)
+        @test ext.p0[1] ≈ expm1(minimum(horizon_values(sc[:c], 10)))
 
         hp = horizon_percentiles(sc; vars = [:a, :c], horizons = [1, 10, 25])
         @test hp.variable == ["a", "a", "a", "c", "c", "c"]
@@ -61,6 +98,14 @@ using MacroFinanceScenarios.EDA: print_table
         fan = horizon_percentiles(sc; vars = [:a], horizons = 1:T, kind = :level, probs = [0.025, 0.5])
         @test propertynames(fan) == [:variable, :horizon, :year, :mean, Symbol("p2.5"), :p50]
         @test fan.p50 ≈ [median(sc[:a][t, :]) for t in 1:T]
+    end
+
+    @testset "fan" begin
+        @test fan(sc, :a) isa Plots.Plot
+        @test fan(sc, :a; kind = :annualised, simple = true, μ = 0.03, scale = 100) isa Plots.Plot
+        p = fan(sc, :c; kind = :wealth, μ = 0.07, yscale = :log10, title = "c")
+        @test p isa Plots.Plot
+        @test last(p.series_list)[:y] ≈ exp.((1:T) .* 0.07)  # reference curve exp(h μ)
     end
 
     @testset "drawdowns" begin

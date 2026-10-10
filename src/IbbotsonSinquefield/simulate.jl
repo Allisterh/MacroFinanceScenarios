@@ -47,7 +47,7 @@ unconditional_mean(c::AbstractVector, A::AbstractMatrix) = (I - A) \ c
     is_coefficients(ar_π::AR1, ar_r::AR1, ar_tp::AR1; erp_target, tp_mean=nothing) -> (c, A, names)
 
 Intercepts `c` and lag matrix `A` of the Ibbotson–Sinquefield model, state `[π, r, tp, erp]`:
-π, r and the term spread tp follow their AR(1) fits; erp has zero lag coefficients and
+π, r and the term premium tp follow their AR(1) fits; erp has zero lag coefficients and
 intercept `erp_target` (its simulated mean, required). `tp_mean` optionally overrides the
 unconditional mean of tp: its intercept becomes `tp_mean·(1 − φ_tp)`, keeping `φ_tp`.
 """
@@ -147,33 +147,28 @@ function simulate_var_bootstrapped_res(c::AbstractVector{<:Real}, A::AbstractMat
 end
 
 """
-    returns_from_components(sc::Scenarios; real=false, bond_maturity=10) -> Scenarios
+    returns_from_components(sc::Scenarios; real=false) -> Scenarios
 
 Asset log returns from the components `π, r, tp, erp` of `sc`:
 
 - T-bill `rf = π + r`
-- 10y bond `rb`: `rf + tp` is the log 10y yield at the start of each year, and `rb_t` is the
-  par-bond return (`calculate_bond_returns`, annual step) from the yield at the start of
-  year t to the yield at the start of year t+1
+- 10y bond `rb = rf + tp`
 - equity `re = rf + erp`
 
-The last simulated year has no closing yield, so the result covers years `1:T-1` of `sc`
-for every variable. With `real = true`, π is subtracted from each.
+With `real = true`, π is subtracted from each and the outputs are named
+`[:r, :rb_real, :re_real]` (the real T-bill return is `r`), matching the historical series
+of `load_shiller_annual`.
 """
-function returns_from_components(sc::Scenarios; real::Bool = false, bond_maturity::Real = 10)
-    T = size(sc.data, 2)
-    T >= 2 || throw(ArgumentError("bond returns need at least 2 simulated years, got $T"))
-    comp(name) = @view sc.data[varindex(sc.names, name), :, :]
+function returns_from_components(sc::Scenarios; real::Bool = false)
+    comp(name) = sc.data[varindex(sc.names, name), :, :]
     π, r, tp, erp = comp(:π), comp(:r), comp(:tp), comp(:erp)
 
     rf = π .+ r                                             # T × n_scen
-    y10 = exp.(rf .+ tp) .- 1
-    rb = log.(1 .+ calculate_bond_returns(y10, bond_maturity, 1))   # (T−1) × n_scen
-    rf, re = rf[1:end-1, :], (rf .+ erp)[1:end-1, :]
+    rb, re = rf .+ tp, rf .+ erp
     if real
-        π1 = π[1:end-1, :]
-        rf, rb, re = rf .- π1, rb .- π1, re .- π1
+        rf, rb, re = rf .- π, rb .- π, re .- π
     end
-    rets = cat(rf, rb, re; dims = 3)                        # (T−1) × n_scen × 3
-    return Scenarios(permutedims(rets, (3, 1, 2)), [:rf, :rb, :re], sc.start_year)
+    rets = cat(rf, rb, re; dims = 3)                        # T × n_scen × 3
+    names = real ? [:r, :rb_real, :re_real] : [:rf, :rb, :re]
+    return Scenarios(permutedims(rets, (3, 1, 2)), names, sc.start_year)
 end

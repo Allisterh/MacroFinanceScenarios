@@ -1,6 +1,6 @@
-# Scenario evaluation: per-path moments, mean correlations, horizon percentiles and
+# Scenario evaluation: per-path moments, correlations, horizon percentiles, fan charts and
 # drawdowns of simulated `Scenarios` (n_vars × T × n_scen, log units). Like the EDA
-# helpers, every function returns a labelled DataFrame and never prints; use
+# helpers, every table function returns a labelled DataFrame and never prints; use
 # `EDA.print_table` for the output.
 
 const DEFAULT_PROBS = [0.05, 0.25, 0.5, 0.75, 0.95]
@@ -16,15 +16,19 @@ summary_pairs(x::AbstractVector, probs) =
     [:mean => mean(x); [prob_name(p) => q for (p, q) in zip(probs, quantile(x, probs))]]
 
 """
-    path_moments(sc::Scenarios, name; probs=[0.05, 0.25, 0.5, 0.75, 0.95]) -> DataFrame
-    path_moments(sc::Scenarios; probs) -> Vector{Pair{Symbol,DataFrame}}
+    path_moments(sc::Scenarios, name; hist=nothing, probs=[0.05, 0.25, 0.5, 0.75, 0.95]) -> DataFrame
+    path_moments(sc::Scenarios; hist=nothing, probs) -> Vector{Pair{Symbol,DataFrame}}
 
 Moments of variable `name` computed within each simulated path (mean, std, skewness,
 excess kurtosis, lag-1 autocorrelation), summarised across scenarios: one row per
 statistic, columns `mean` and the percentiles `probs` of that statistic. Without `name`,
 one table per variable of `sc`, in order.
+
+`hist` is an optional `EDA.describe_series` table (in the same units as `sc`): its row
+with `variable == name` goes into a column `historical` after `statistic`, `missing` if
+`hist` has no such row.
 """
-function path_moments(sc::Scenarios, name::Symbol; probs = DEFAULT_PROBS)
+function path_moments(sc::Scenarios, name::Symbol; hist = nothing, probs = DEFAULT_PROBS)
     X = sc[name]                                        # T × n_scen
     size(X, 1) >= 2 || throw(ArgumentError("path moments need at least 2 simulated years"))
     paths = eachcol(X)
@@ -34,71 +38,137 @@ function path_moments(sc::Scenarios, name::Symbol; probs = DEFAULT_PROBS)
              :ex_kurtosis => kurtosis.(paths),          # StatsBase.kurtosis is excess kurtosis
              :ar1 => [autocor(x, [1])[1] for x in paths]]
     rows = [(; :statistic => String(s), summary_pairs(v, probs)...) for (s, v) in stats]
-    return DataFrame(rows)
+    df = DataFrame(rows)
+    if hist !== nothing
+        i = findfirst(==(String(name)), String.(hist.variable))
+        insertcols!(df, 2, :historical =>
+            [i === nothing ? missing : hist[i, s] for s in first.(stats)])
+    end
+    return df
 end
 
-path_moments(sc::Scenarios; probs = DEFAULT_PROBS) =
-    [name => path_moments(sc, name; probs) for name in sc.names]
+path_moments(sc::Scenarios; hist = nothing, probs = DEFAULT_PROBS) =
+    [name => path_moments(sc, name; hist, probs) for name in sc.names]
 
 """
-    mean_correlations(sc::Scenarios) -> DataFrame
+    scenarios_correlations(sc::Scenarios; hist=nothing, probs=(0.05, 0.95), digits=2) -> DataFrame
 
-Correlation matrix of the variables of `sc` computed within each path (over time), then
-averaged across scenarios. Same layout as `EDA.correlation_table`: the first column holds
-the row labels.
+Correlations of the variables of `sc` computed within each path (over time), as a table of
+strings with the row labels in the first column:
+
+- lower triangle: mean across paths and the `probs` percentiles, `"0.30 (0.12, 0.44)"`;
+- upper triangle: the historical correlation from `hist` (an `EDA.correlation_table`,
+  matched by variable name), `""` without `hist` or if a variable is not in it;
+- diagonal: `"1"`.
+
+Numbers are rounded to `digits` decimals here, so print the result as is.
 """
-function mean_correlations(sc::Scenarios)
+function scenarios_correlations(sc::Scenarios; hist = nothing, probs = (0.05, 0.95), digits::Int = 2)
     n, T, n_scen = size(sc.data)
     T >= 2 || throw(ArgumentError("correlations need at least 2 simulated years"))
-    C = zeros(n, n)
+    length(probs) == 2 || throw(ArgumentError("probs must hold two probabilities, got $probs"))
+    C = Array{Float64,3}(undef, n, n, n_scen)
     for s in 1:n_scen
-        C .+= cor(permutedims(@view sc.data[:, :, s]))
+        C[:, :, s] = cor(permutedims(@view sc.data[:, :, s]))
     end
-    names = String.(sc.names)
-    df = DataFrame(C ./ n_scen, names)
-    insertcols!(df, 1, :variable => names)
+
+    labels = String.(sc.names)
+    fmt(x) = Printf.format(Printf.Format("%.$(digits)f"), x)
+    function hist_cell(a, b)
+        hist === nothing && return ""
+        i = findfirst(==(a), String.(hist.variable))
+        (i === nothing || !(b in names(hist))) && return ""
+        return fmt(hist[i, b])
+    end
+    cells = [i == j ? "1" :
+             i > j ? (c = C[i, j, :]; q = quantile(c, collect(probs));
+                      "$(fmt(mean(c))) ($(fmt(q[1])), $(fmt(q[2])))") :
+             hist_cell(labels[i], labels[j])
+             for i in 1:n, j in 1:n]
+    df = DataFrame(cells, labels)
+    insertcols!(df, 1, :variable => labels)
     return df
 end
 
 """
-    horizon_values(X::AbstractMatrix, h; kind=:annualised) -> Vector
+    horizon_values(X::AbstractMatrix, h; kind=:annualised, simple=false) -> Vector
 
 Value at horizon `h` of each path (column) of the `T × n_scen` log series `X`:
 
 - `:annualised`: annualised cumulative `sum(x_1..h) / h` (returns, average inflation)
 - `:level`: the level in year h, `x_h` (state variables: π, r, rf, tp)
 - `:wealth`: cumulative wealth `exp(sum(x_1..h))` (or the price level for π)
+
+`simple = true` turns `:level` and `:annualised` log rates into simple rates, `exp(·) − 1`
+(the geometric-average annual return for `:annualised`). It is applied per path, so summary
+statistics of the result are those of the simple rates (the mean does not commute with
+`exp`). Not allowed with `:wealth`, which is already exponentiated.
 """
-function horizon_values(X::AbstractMatrix, h::Integer; kind::Symbol = :annualised)
+function horizon_values(X::AbstractMatrix, h::Integer; kind::Symbol = :annualised, simple::Bool = false)
     1 <= h <= size(X, 1) || throw(ArgumentError("horizon $h outside 1:$(size(X, 1))"))
-    kind === :level && return X[h, :]
-    S = vec(sum(@view(X[1:h, :]); dims = 1))
-    kind === :annualised && return S ./ h
-    kind === :wealth && return exp.(S)
-    throw(ArgumentError("kind must be :annualised, :level or :wealth, got :$kind"))
+    kind in (:annualised, :level, :wealth) ||
+        throw(ArgumentError("kind must be :annualised, :level or :wealth, got :$kind"))
+    kind === :wealth && simple && throw(ArgumentError("simple = true does not apply to kind = :wealth"))
+    v = if kind === :level
+        X[h, :]
+    else
+        S = vec(sum(@view(X[1:h, :]); dims = 1))
+        kind === :wealth ? exp.(S) : S ./ h
+    end
+    return simple ? expm1.(v) : v
 end
 
 """
     horizon_percentiles(sc::Scenarios; vars=sc.names, horizons=[1, 5, 10, 25],
-                        probs=[0.05, 0.25, 0.5, 0.75, 0.95], kind=:annualised) -> DataFrame
+                        probs=[0.05, 0.25, 0.5, 0.75, 0.95], kind=:annualised,
+                        simple=false) -> DataFrame
 
 Distribution across scenarios of each variable in `vars` at each horizon (see
-`horizon_values` for `kind`): one row per variable × horizon with columns `variable`,
-`horizon`, `year`, `mean` and the percentiles `probs`. Horizons beyond the simulated length
-throw.
+`horizon_values` for `kind` and `simple`): one row per variable × horizon with columns
+`variable`, `horizon`, `year`, `mean` and the percentiles `probs`. Horizons beyond the
+simulated length throw.
 
 Which `kind` fits which variable: `:annualised` for asset returns (rf, rb, re), π, erp;
 `:level` for the persistent state variables π, r, rf and tp (with `horizons = 1:T` this is
 the fan chart data).
 """
 function horizon_percentiles(sc::Scenarios; vars = sc.names, horizons = [1, 5, 10, 25],
-                             probs = DEFAULT_PROBS, kind::Symbol = :annualised)
+                             probs = DEFAULT_PROBS, kind::Symbol = :annualised, simple::Bool = false)
     rows = map(Iterators.product(horizons, vars)) do (h, name)
-        v = horizon_values(sc[name], h; kind)
+        v = horizon_values(sc[name], h; kind, simple)
         (; :variable => String(name), :horizon => h, :year => sc.start_year + h - 1,
            summary_pairs(v, probs)...)
     end
     return DataFrame(vec(rows))
+end
+
+"""
+    fan(sc::Scenarios, name; kind=:level, simple=false, μ=nothing, scale=1.0,
+        title=String(name), yscale=:identity) -> Plots.Plot
+
+Fan chart of variable `name` over the simulated years: 5–95 and 25–75 percentile bands and
+the median of `horizon_values(sc[name], h; kind, simple)` for every `h`, multiplied by
+`scale` (e.g. 100 for percent; keep 1 for `:wealth`).
+
+`μ` is an optional reference line in log units (e.g. the unconditional mean), drawn dashed
+at `μ` for `:level`/`:annualised`, `exp(μ) − 1` with `simple = true`, and along `exp(h μ)`
+for `:wealth`. `yscale` is passed to Plots, e.g. `:log10` for long wealth fans.
+"""
+function fan(sc::Scenarios, name::Symbol; kind::Symbol = :level, simple::Bool = false,
+             μ::Union{Real,Nothing} = nothing, scale::Real = 1.0, title = String(name),
+             yscale::Symbol = :identity)
+    q = horizon_percentiles(sc; vars = [name], horizons = 1:size(sc.data, 2), kind, simple)
+    yrs = q.year
+    p = plot(yrs, scale .* q.p5; fillrange = scale .* q.p95, fillalpha = 0.2, lw = 0, color = 1,
+             label = "5–95", title, legend = :topleft, legendfontsize = 7, yscale)
+    plot!(p, yrs, scale .* q.p25; fillrange = scale .* q.p75, fillalpha = 0.3, lw = 0, color = 1,
+          label = "25–75")
+    plot!(p, yrs, scale .* q.p50; lw = 2, color = 1, label = "median")
+    if μ !== nothing
+        ref = kind === :wealth ? exp.(q.horizon .* μ) : fill(simple ? expm1(μ) : float(μ), length(yrs))
+        plot!(p, yrs, scale .* ref; ls = :dash, color = :black, label = "uncond. mean")
+    end
+    return p
 end
 
 """

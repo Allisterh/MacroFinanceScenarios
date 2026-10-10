@@ -1,0 +1,292 @@
+---
+title: "Ibbotson–Sinquefield scenarios"
+engine: julia
+format:
+  html:
+    embed-resources: true   # one self-contained file per spec, figures included
+    toc: true
+params:
+  spec: "ar1935-2025_boot1935-2025_erp4.0"
+  T: 30
+  n_scen: 10000
+  seed: 1234
+---
+
+```{julia}
+#| tags: [parameters]
+#| output: false
+# Defaults for running the cells outside Quarto. Under `quarto render` the front-matter
+# `params` (overridden by `-P name:value`, see render_reports.sh) are already defined as
+# constants, so these assignments are skipped.
+@isdefined(spec) || (spec = "ar1935-2025_boot1935-2025_erp4.0")  # directory in specs/
+@isdefined(T) || (T = 30)                       # simulated years
+@isdefined(n_scen) || (n_scen = 10000)
+@isdefined(seed) || (seed = 1234)
+```
+
+```{julia}
+#| output: false
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
+
+using MacroFinanceScenarios
+using MacroFinanceScenarios.IbbotsonSinquefield
+using MacroFinanceScenarios.EDA
+using MacroFinanceScenarios.ScenariosEvaluation
+using CSV, DataFrames, LinearAlgebra, Random, Statistics, StatsBase
+using Plots
+
+show_table(t; title = "", digits = 2) =
+    display(HTML(sprint(io -> print_table(io, t; backend = :html, digits, title))))
+
+# Everything loaded and computed is in decimal log units; the report shows percent. Means,
+# std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations
+# do not.
+pct(sc::Scenarios) = Scenarios(100 .* sc.data, sc.names, sc.start_year)
+function pct(df::DataFrame; cols)
+    out = copy(df)
+    for c in cols
+        out[!, c] = 100 .* out[!, c]
+    end
+    return out
+end
+moment_cols = [:mean, :std, :min, :p25, :p50, :p75, :max]   # describe_series columns in %
+span(p) = "$(p[1])–$(p[2])"
+```
+
+## Specification
+
+Specification `{julia} spec`, estimated in `issm_eda.ipynb` and loaded from its directory
+in `specs/`; nothing is fitted here.
+
+```{julia}
+spec_dir = joinpath(@__DIR__, "specs", spec)
+p = load_issm_params(joinpath(spec_dir, "params.yaml"))
+boot_years, U, u_names = load_residuals(joinpath(spec_dir, "bootstrap_residuals.csv"))
+u_names == p.names || error("bootstrap residual columns $u_names do not match the state $(p.names)")
+hist_moments = CSV.read(joinpath(spec_dir, "hist_moments.csv"), DataFrame; stringtype = String)
+hist_cor = CSV.read(joinpath(spec_dir, "hist_correlations.csv"), DataFrame; stringtype = String)
+hist_pct = pct(hist_moments; cols = moment_cols)
+
+show_table(DataFrame(parameter = ["AR(1) window", "bootstrap window", "erp_target (%)",
+                                  "simulated years", "scenarios", "seed", "last observation"],
+                     value = [span(p.ar_period), span(p.boot_period), string(100p.erp_target),
+                              string(T), string(n_scen), string(seed), string(p.last_year)]);
+           title = "Parameters")
+```
+
+Units: returns, rates and moments below are annual log values in percent, except where a
+table or chart says *simple rate* (`exp(·) − 1` of the log rate, in percent) or *wealth*
+(of 1 invested); φ, R², skewness, excess kurtosis, autocorrelations and correlations are
+unit-free.
+
+### AR(1) fits (`{julia} span(p.ar_period)`)
+
+```{julia}
+ar_table = DataFrame([(variable = a.variable, n = a.n, c = 100a.c, se_c = 100a.se_c,
+                       φ = a.phi, se_φ = a.se_phi, t_φ = a.phi / a.se_phi, σ = 100a.sigma,
+                       R² = a.r2, uncond_mean = 100a.c / (1 - a.phi),
+                       uncond_std = 100a.sigma / sqrt(1 - a.phi^2))
+                      for a in p.ar1])
+show_table(ar_table; title = "AR(1) coefficients, $(span(p.ar_period))")
+```
+
+### Historical moments of the bootstrap sample (`{julia} span(p.boot_period)`)
+
+```{julia}
+is_resid = startswith.(hist_pct.variable, "u_")
+show_table(hist_pct[.!is_resid, :]; title = "Moments, $(span(p.boot_period))")
+show_table(hist_pct[is_resid, :]; title = "Bootstrap residuals U, $(span(p.boot_period))")
+show_table(hist_cor; title = "Correlations, $(span(p.boot_period))")
+```
+
+## Simulation
+
+The state `y = [π, r, tp, erp]` follows `y_t = c + A y_{t-1} + u_t` with a diagonal `A`
+(AR(1) for π, r and tp; erp i.i.d. around `erp_target`). Each simulated year draws one
+historical year of the demeaned residuals `U` and uses the whole row. Paths start from the
+last observed year.
+
+```{julia}
+c, A, vnames = p.c, p.A, p.names
+sc = simulate_var_bootstrapped_res(c, A, vnames, U, T, n_scen;
+                                   y0 = p.y0, start_year = p.start_year, rng = MersenneTwister(seed))
+nom = returns_from_components(sc)
+rl = returns_from_components(sc; real = true)
+μ = unconditional_mean(c, A)
+
+# All simulated series in one Scenarios; rl's :r is sc's :r.
+full = Scenarios(vcat(sc.data, nom.data, rl.data[2:3, :, :]),
+                 [vnames; nom.names; rl.names[2:3]], sc.start_year)
+μπ, μr, μtp, μerp = μ
+μ_full = Dict(:π => μπ, :r => μr, :tp => μtp, :erp => μerp,
+              :rf => μπ + μr, :rb => μπ + μr + μtp, :re => μπ + μr + μerp,
+              :rb_real => μr + μtp, :re_real => μr + μerp)
+pick(s::Scenarios, vars) = Scenarios(s.data[indexin(vars, s.names), :, :], vars, s.start_year)
+
+show_table(DataFrame(variable = String.(vnames), c = 100c, φ = diag(A), y0 = 100p.y0,
+                     uncond_mean = 100μ);
+           title = "VAR(1) intercepts, lags and starting point")
+println("Bootstrap residuals: $(size(U, 1)) years, $(first(boot_years))–$(last(boot_years)); ",
+        "simulated years $(first(scenario_years(sc)))–$(last(scenario_years(sc))).")
+```
+
+## Fan charts
+
+5–95 and 25–75 percentile bands, median, and the unconditional mean of the VAR (dashed),
+mapped to each series (e.g. `re`: `μ_π + μ_r + erp_target`; real returns without `μ_π`).
+
+```{julia}
+fans(vars; kwargs...) = [v === nothing ? plot(; framestyle = :none) :
+                         fan(full, v; μ = μ_full[v], kwargs...) for v in vars]
+```
+
+### Cumulative wealth
+
+```{julia}
+#| fig-cap: "Wealth of 1 invested, nominal (top) and real (bottom)"
+plot(fans([:rf, :rb, :re, :r, :rb_real, :re_real]; kind = :wealth)...;
+     layout = (2, 3), size = (1000, 600), ylabel = "wealth")
+```
+
+### Annualised returns
+
+Geometric-average annual return (annual inflation rate for π) over the first `h` years,
+`exp(sum(x_1..h)/h) − 1`.
+
+```{julia}
+#| fig-cap: "Annualised simple rates: inflation and nominal returns (top), real returns (bottom)"
+plot(fans([:π, :rf, :rb, :re, nothing, :r, :rb_real, :re_real]; kind = :annualised,
+          simple = true, scale = 100)...;
+     layout = (2, 4), size = (1200, 600), ylabel = "%")
+```
+
+### Yearly levels
+
+```{julia}
+#| fig-cap: "Simulated yearly levels of inflation, the real and nominal short rate and the term premium, simple rates"
+plot(fans([:π, :r, :rf, :tp]; kind = :level, simple = true, scale = 100)...;
+     layout = (2, 2), size = (900, 600), ylabel = "%")
+```
+
+## Evaluation
+
+### Per-path moments
+
+Statistics computed within each simulated path, then summarised across scenarios; the
+`historical` column is the bootstrap sample (`erp` differs by design: its simulated mean is
+`erp_target`).
+
+```{julia}
+for (label, s) in (("components", sc), ("nominal returns", nom), ("real returns", rl))
+    for (name, t) in path_moments(pct(s); hist = hist_pct)
+        show_table(t; title = "$name ($label)")
+    end
+end
+```
+
+### Correlations
+
+Within-path correlations: below the diagonal the mean across paths with the 5–95
+percentiles in brackets, above the diagonal the historical correlation of the bootstrap
+sample.
+
+```{julia}
+for (title, vars) in (("Components and nominal short rate", [:π, :r, :tp, :erp, :rf]),
+                      ("Nominal returns, inflation and erp", [:rf, :rb, :re, :π, :erp]),
+                      ("Real returns and inflation", [:r, :rb_real, :re_real, :π]))
+    show_table(scenarios_correlations(pick(full, vars); hist = hist_cor); title)
+end
+```
+
+### Horizon percentiles
+
+Annualised returns: the geometric-average annual return (annual inflation rate for π)
+over `h` years, `exp(sum(x_1..h)/h) − 1`, in percent.
+
+```{julia}
+horizons = filter(<=(T), [1, 5, 10, 20, 30])
+function horizon_tables(vars; kind, label)
+    for v in vars
+        t = select(horizon_percentiles(full; vars = [v], horizons, kind, simple = true), Not(:variable))
+        t = pct(t; cols = names(t, Not([:horizon, :year])))
+        show_table(t; title = "$v, $label")
+    end
+end
+horizon_tables([:π, :rf, :rb, :re, :r, :rb_real, :re_real]; kind = :annualised,
+               label = "annualised (simple rate, %)")
+```
+
+Levels in year `h` (the yearly-level fan chart numbers), simple rates in percent:
+
+```{julia}
+horizon_tables([:π, :rf, :r]; kind = :level, label = "level in year h (simple rate, %)")
+```
+
+### Drawdowns
+
+Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years),
+per path over the `{julia} T`-year horizon.
+
+```{julia}
+function dd_table(s)
+    t = drawdown_table(s)
+    rows = t.statistic .== "max_drawdown"
+    num = names(t, Not([:variable, :statistic]))
+    t[rows, num] .*= 100
+    return t
+end
+show_table(dd_table(nom); title = "Nominal")
+show_table(dd_table(rl); title = "Real")
+```
+
+## Validation
+
+One-year moments in the steady state against the historical bootstrap sample. To avoid
+the transient from the starting point, this check uses a separate simulation started from
+the unconditional mean and pools every simulated year of every path. By construction:
+
+- erp has mean `erp_target` (historical mean differs by design) and the historical std,
+  skewness and kurtosis, and no autocorrelation;
+- π, r and tp have the AR(1) unconditional moments, which match the bootstrap sample
+  only on average (and only if the AR and bootstrap windows coincide);
+- correlations of the shocks are preserved; correlations of the levels also depend on the
+  persistence.
+
+```{julia}
+ss = simulate_var_bootstrapped_res(c, A, vnames, U, T, n_scen;
+                                   y0 = :mean, start_year = p.start_year,
+                                   rng = MersenneTwister(seed + 1))
+ss_nom = returns_from_components(ss)
+ss_all = Scenarios(vcat(ss.data, ss_nom.data), [vnames; ss_nom.names], ss.start_year)
+val_vars = [:π, :r, :tp, :erp, :rf, :rb, :re]
+
+pooled(X) = vec(X)
+lag1(X) = cor(vec(X[1:end-1, :]), vec(X[2:end, :]))
+hist_row(v) = hist_pct[findfirst(==(String(v)), hist_pct.variable), :]
+
+validation = DataFrame(map(val_vars) do v
+    X = 100 .* ss_all[v]
+    x = pooled(X)
+    h = hist_row(v)
+    (variable = String(v),
+     mean_hist = h.mean, mean_sim = mean(x),
+     std_hist = h.std, std_sim = std(x),
+     skew_hist = h.skewness, skew_sim = skewness(x),
+     exkurt_hist = h.ex_kurtosis, exkurt_sim = kurtosis(x),
+     ar1_hist = h.ar1, ar1_sim = lag1(X))
+end)
+show_table(validation; title = "One-year moments: historical $(span(p.boot_period)) vs simulated steady state")
+```
+
+```{julia}
+labels = String.(val_vars)
+C_hist = Matrix(hist_cor[indexin(labels, hist_cor.variable), labels])
+C_sim = cor(reduce(hcat, pooled(ss_all[v]) for v in val_vars))
+diff_table = DataFrame(C_sim .- C_hist, labels)
+insertcols!(diff_table, 1, :variable => labels)
+sim_table = DataFrame(C_sim, labels)
+insertcols!(sim_table, 1, :variable => labels)
+show_table(sim_table; title = "Simulated correlations (steady state, pooled)")
+show_table(diff_table; title = "Simulated minus historical correlations")
+```

@@ -12,7 +12,7 @@ using MacroFinanceScenarios.EDA
     ta = load_shiller_annual(joinpath(@__DIR__, "..", "data", "ie_data.xlsx"))
 
     @testset "columns and sample" begin
-        @test colnames(ta) == [:π, :rf, :r, :rb, :tp, :re, :xr, :cape, :dlcape, :fr, :erp]
+        @test colnames(ta) == [:π, :rf, :r, :rb, :tp, :re, :xr, :rb_real, :re_real, :cape, :dlcape, :fr, :erp]
         # Data2 starts in 1934-01, so 1935 is the first full Dec→Dec year; 2026 is partial.
         @test year.(timestamp(ta)) == collect(1935:2025)
         @test all(isfinite, values(ta))
@@ -24,9 +24,9 @@ using MacroFinanceScenarios.EDA
         @test v(:xr) .- mean(v(:dlcape)) ≈ v(:erp)
         @test v(:re) .- v(:dlcape) ≈ v(:fr)
         @test v(:rf) .- v(:π) ≈ v(:r)
-        # rf + tp is the 10y yield at the start of the year; rb is the par-bond return on it.
-        y10 = exp.(v(:rf) .+ v(:tp)) .- 1
-        @test v(:rb)[1:end-1] ≈ log.(1 .+ vec(IbbotsonSinquefield.calculate_bond_returns(y10, 10, 1)))
+        @test v(:rb) .- v(:rf) ≈ v(:tp)
+        @test v(:rb) .- v(:π) ≈ v(:rb_real)
+        @test v(:re) .- v(:π) ≈ v(:re_real)
         @test v(:dlcape)[2:end] ≈ diff(log.(v(:cape)))
     end
 
@@ -256,17 +256,59 @@ end
         sc = simulate_var_bootstrapped_res(c, A, names, U, 20, 5; y0 = :mean, rng = Xoshiro(3))
         nom = returns_from_components(sc)
         rl = returns_from_components(sc; real = true)
-        @test nom.names == rl.names == [:rf, :rb, :re]
+        @test nom.names == [:rf, :rb, :re]
+        @test rl.names == [:r, :rb_real, :re_real]
+        @test rl[:r] ≈ sc[:r]
         @test nom.start_year == sc.start_year
-        @test size(nom.data) == (3, 19, 5)
+        @test size(nom.data) == (3, 20, 5)
         rf = sc[:π] .+ sc[:r]
-        @test nom[:rf] ≈ rf[1:end-1, :]
-        @test nom[:re] ≈ (rf .+ sc[:erp])[1:end-1, :]
-        y10 = exp.(rf .+ sc[:tp]) .- 1
-        @test nom[:rb] ≈ log.(1 .+ IbbotsonSinquefield.calculate_bond_returns(y10, 10, 1))
-        # Constant yield: the par bond returns its yield.
-        flat = Scenarios(repeat([0.02, 0.01, 0.015, 0.04], 1, 4, 2), [:π, :r, :tp, :erp], 2026)
-        @test returns_from_components(flat)[:rb] ≈ fill(0.045, 3, 2)
-        @test rl.data ≈ nom.data .- reshape(sc[:π][1:end-1, :], 1, 19, 5)
+        @test nom[:rf] ≈ rf
+        @test nom[:rb] ≈ rf .+ sc[:tp]
+        @test nom[:re] ≈ rf .+ sc[:erp]
+        @test rl.data ≈ nom.data .- reshape(sc[:π], 1, 20, 5)
+    end
+end
+
+@testset "IbbotsonSinquefield spec io" begin
+    using Random: Xoshiro
+    rng = Xoshiro(5)
+    fits = [fit_ar1(cumsum(0.01 .* randn(rng, 40)) .* 0.1 .+ 0.02; years = 1981:2020) for _ in 1:3]
+    dir = mktempdir()
+
+    @testset "params round trip" begin
+        y0 = [0.027, 0.015, 0.004, 1/3]
+        path = save_issm_params(joinpath(dir, "params.yaml"); ar_π = fits[1], ar_r = fits[2],
+                                ar_tp = fits[3], erp_target = 0.04, boot_period = (1990, 2020),
+                                y0, last_year = 2020)
+        p = load_issm_params(path)
+        c, A, names = is_coefficients(fits...; erp_target = 0.04)
+        @test p.names == names
+        @test p.c == c                                   # exact: shortest round-trip repr
+        @test p.A == A
+        @test p.y0 == y0
+        @test p.start_year == 2021 && p.last_year == 2020
+        @test p.ar_period == (1981, 2020) && p.boot_period == (1990, 2020)
+        @test p.erp_target == 0.04
+        @test [a.variable for a in p.ar1] == ["π", "r", "tp"]
+        @test p.ar1[2].n == 39
+        @test p.ar1[2].phi == fits[2].φ && p.ar1[2].se_phi == fits[2].se[2]
+        @test p.ar1[3].sigma == fits[3].σ && p.ar1[3].r2 == fits[3].r2
+
+        other = fit_ar1(fits[1].fitted; years = 1982:2020)
+        @test_throws ArgumentError save_issm_params(joinpath(dir, "bad.yaml"); ar_π = other,
+            ar_r = fits[2], ar_tp = fits[3], erp_target = 0.04, boot_period = (1990, 2020),
+            y0, last_year = 2020)
+    end
+
+    @testset "residuals round trip" begin
+        U = randn(rng, 7, 4) ./ 3
+        path = save_residuals(joinpath(dir, "u.csv"), 2001:2007, U, [:π, :r, :tp, :erp])
+        years, M, names = load_residuals(path)
+        @test years == collect(2001:2007)
+        @test M == U
+        @test names == [:π, :r, :tp, :erp]
+        _, M1, _ = load_residuals(save_residuals(joinpath(dir, "u1.csv"), 2001:2007, U[:, 1:1], [:π]))
+        @test M1 == U[:, 1:1]
+        @test_throws DimensionMismatch save_residuals(joinpath(dir, "x.csv"), 2001:2006, U, [:π, :r, :tp, :erp])
     end
 end

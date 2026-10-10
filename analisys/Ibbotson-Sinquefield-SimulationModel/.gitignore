@@ -1,0 +1,5 @@
+/.quarto/
+**/*.quarto_ipynb
+# Ad-hoc renders; the reports to keep go to reports/ (render_reports.sh).
+/issm_report.html
+/issm_report_files/
