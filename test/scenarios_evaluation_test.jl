@@ -43,26 +43,37 @@ using DataFrames: DataFrame, Not
         @test last(path_moments(sc; hist)[1]).historical == [0.03, 0.02, 0.1, 0.0, 0.6]
     end
 
-    @testset "scenarios_correlations" begin
+    @testset "path correlations" begin
         # 2 paths of 3 variables, correlations checked by hand.
         x = [1.0, 2.0, 3.0, 4.0]
         p1 = permutedims(hcat(x, 2x, -x))                    # cor(a, b) = 1, cor(a, c) = -1
         p2 = permutedims(hcat(x, [1.0, 3.0, 2.0, 4.0], x))   # cor(a, b) = 0.8, cor(a, c) = 1
         small = Scenarios(cat(p1, p2; dims = 3), [:a, :b, :c], 2026)
+        t = path_correlations(small; probs = [0.0, 1.0])
+        @test propertynames(t) == [:var1, :var2, :mean, :p0, :p100]
+        @test t.var1 == ["a", "a", "b"] && t.var2 == ["b", "c", "c"]   # lower triangle, by column
+        @test t.mean ≈ [0.9, 0.0, -0.1]                                # cor(b, c): -1 and 0.8
+        @test t.p0 ≈ [0.8, -1.0, -1.0] && t.p100 ≈ [1.0, 1.0, 0.8]
+
         hist = DataFrame(variable = ["c", "a"], c = [1.0, 0.25], a = [0.25, 1.0])
-        t = scenarios_correlations(small; hist, probs = (0.0, 1.0))
-        @test t.variable == ["a", "b", "c"]
-        @test propertynames(t) == [:variable, :a, :b, :c]
-        @test t.a == ["1", "0.90 (0.80, 1.00)", "0.00 (-1.00, 1.00)"]
-        @test t.c[1] == "0.25"                               # hist(a, c)
-        @test t.b[1] == "" && t.c[2] == ""                   # b not in hist
-        @test t.b[2] == "1" && t.c[3] == "1"
-        @test t.b[3] == "-0.10 (-1.00, 0.80)"                # cor(b, c): -1 and 0.8
-        @test all(==(""), scenarios_correlations(small; digits = 1)[1, [:b, :c]])
-        @test scenarios_correlations(small; digits = 1).a[2] == "0.9 (0.8, 1.0)"
-        # Default percentiles on the random scenarios: mean matches the per-path average.
-        m = mean(cor(permutedims(data[:, :, s]))[2, 1] for s in 1:n_scen)
-        @test startswith(scenarios_correlations(sc).a[2], string(round(m; digits = 2)))
+        th = path_correlations(small; hist, probs = [0.0, 1.0])
+        @test propertynames(th) == [:var1, :var2, :historical, :mean, :p0, :p100, :hist_rank]
+        @test isequal(th.historical, [missing, 0.25, missing])        # b not in hist
+        @test isequal(th.hist_rank, [missing, 0.5, missing])          # paths at -1 and 1
+        @test th[:, Not([:historical, :hist_rank])] == t
+
+        m = mean_path_correlations(small)
+        @test propertynames(m) == [:variable, :a, :b, :c]
+        @test m.variable == ["a", "b", "c"]
+        M = Matrix(m[:, 2:end])
+        @test M ≈ M' && all(M[i, i] ≈ 1 for i in 1:3)
+        @test M[2, 1] ≈ 0.9 && M[3, 1] ≈ 0.0 && M[3, 2] ≈ -0.1
+
+        # Random scenarios: default percentiles and the matrix agree with the table's mean.
+        pc = path_correlations(sc)
+        @test propertynames(pc) == [:var1, :var2, :mean, :p5, :p25, :p50, :p75, :p95]
+        @test pc.mean[1] ≈ mean(cor(permutedims(data[:, :, s]))[2, 1] for s in 1:n_scen)
+        @test mean_path_correlations(sc).a[2:3] ≈ pc.mean[1:2]
     end
 
     @testset "horizon values and percentiles" begin

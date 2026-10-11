@@ -5,9 +5,11 @@ format:
   html:
     embed-resources: true   # one self-contained file per spec, figures included
     toc: true
+    code-fold: true
 params:
   spec: "ar1935-2025_boot1935-2025_erp4.0"
-  T: 30
+  T: 100
+  horizons: [1, 5, 10, 20, 30, 50, 100]   # years h of the horizon percentile tables
   n_scen: 10000
   seed: 1234
 ---
@@ -19,7 +21,8 @@ params:
 # `params` (overridden by `-P name:value`, see render_reports.sh) are already defined as
 # constants, so these assignments are skipped.
 @isdefined(spec) || (spec = "ar1935-2025_boot1935-2025_erp4.0")  # directory in specs/
-@isdefined(T) || (T = 30)                       # simulated years
+@isdefined(T) || (T = 100)                      # simulated years
+@isdefined(horizons) || (horizons = [1, 5, 10, 20, 30, 50, 100])  # horizon table years, ≤ T
 @isdefined(n_scen) || (n_scen = 10000)
 @isdefined(seed) || (seed = 1234)
 ```
@@ -87,17 +90,8 @@ ar_table = DataFrame([(variable = a.variable, n = a.n, c = 100a.c, se_c = 100a.s
                        φ = a.phi, se_φ = a.se_phi, t_φ = a.phi / a.se_phi, σ = 100a.sigma,
                        R² = a.r2, uncond_mean = 100a.c / (1 - a.phi),
                        uncond_std = 100a.sigma / sqrt(1 - a.phi^2))
-                      for a in p.ar1])
+                      for a in p.model_params if a.variable != "erp"])
 show_table(ar_table; title = "AR(1) coefficients, $(span(p.ar_period))")
-```
-
-### Historical moments of the bootstrap sample (`{julia} span(p.boot_period)`)
-
-```{julia}
-is_resid = startswith.(hist_pct.variable, "u_")
-show_table(hist_pct[.!is_resid, :]; title = "Moments, $(span(p.boot_period))")
-show_table(hist_pct[is_resid, :]; title = "Bootstrap residuals U, $(span(p.boot_period))")
-show_table(hist_cor; title = "Correlations, $(span(p.boot_period))")
 ```
 
 ## Simulation
@@ -187,15 +181,21 @@ end
 
 ### Correlations
 
-Within-path correlations: below the diagonal the mean across paths with the 5–95
-percentiles in brackets, above the diagonal the historical correlation of the bootstrap
-sample.
+Correlations computed within each simulated path, then summarised across scenarios. The
+matrix is the mean across paths, for a quick scan. In the pair table, `historical` is the
+correlation in the bootstrap sample and `hist_rank` the share of paths with a
+correlation at or below it. Each path covers `{julia} T` years and the historical sample
+`{julia} length(boot_years)`, so the percentile bands are wider than the sampling uncertainty
+of the historical value: they show what a `{julia} T`-year window of the model looks like,
+not a test of the historical correlation.
 
 ```{julia}
 for (title, vars) in (("Components and nominal short rate", [:π, :r, :tp, :erp, :rf]),
                       ("Nominal returns, inflation and erp", [:rf, :rb, :re, :π, :erp]),
                       ("Real returns and inflation", [:r, :rb_real, :re_real, :π]))
-    show_table(scenarios_correlations(pick(full, vars); hist = hist_cor); title)
+    s = pick(full, vars)
+    show_table(mean_path_correlations(s); title = "$title: mean within-path correlations")
+    show_table(path_correlations(s; hist = hist_cor); title = "$title: pairs")
 end
 ```
 
@@ -205,10 +205,10 @@ Annualised returns: the geometric-average annual return (annual inflation rate f
 over `h` years, `exp(sum(x_1..h)/h) − 1`, in percent.
 
 ```{julia}
-horizons = filter(<=(T), [1, 5, 10, 20, 30])
 function horizon_tables(vars; kind, label)
     for v in vars
-        t = select(horizon_percentiles(full; vars = [v], horizons, kind, simple = true), Not(:variable))
+        t = select(horizon_percentiles(full; vars = [v], horizons = filter(<=(T), horizons), kind,
+                                       simple = true), Not(:variable))
         t = pct(t; cols = names(t, Not([:horizon, :year])))
         show_table(t; title = "$v, $label")
     end
@@ -240,53 +240,4 @@ show_table(dd_table(nom); title = "Nominal")
 show_table(dd_table(rl); title = "Real")
 ```
 
-## Validation
 
-One-year moments in the steady state against the historical bootstrap sample. To avoid
-the transient from the starting point, this check uses a separate simulation started from
-the unconditional mean and pools every simulated year of every path. By construction:
-
-- erp has mean `erp_target` (historical mean differs by design) and the historical std,
-  skewness and kurtosis, and no autocorrelation;
-- π, r and tp have the AR(1) unconditional moments, which match the bootstrap sample
-  only on average (and only if the AR and bootstrap windows coincide);
-- correlations of the shocks are preserved; correlations of the levels also depend on the
-  persistence.
-
-```{julia}
-ss = simulate_var_bootstrapped_res(c, A, vnames, U, T, n_scen;
-                                   y0 = :mean, start_year = p.start_year,
-                                   rng = MersenneTwister(seed + 1))
-ss_nom = returns_from_components(ss)
-ss_all = Scenarios(vcat(ss.data, ss_nom.data), [vnames; ss_nom.names], ss.start_year)
-val_vars = [:π, :r, :tp, :erp, :rf, :rb, :re]
-
-pooled(X) = vec(X)
-lag1(X) = cor(vec(X[1:end-1, :]), vec(X[2:end, :]))
-hist_row(v) = hist_pct[findfirst(==(String(v)), hist_pct.variable), :]
-
-validation = DataFrame(map(val_vars) do v
-    X = 100 .* ss_all[v]
-    x = pooled(X)
-    h = hist_row(v)
-    (variable = String(v),
-     mean_hist = h.mean, mean_sim = mean(x),
-     std_hist = h.std, std_sim = std(x),
-     skew_hist = h.skewness, skew_sim = skewness(x),
-     exkurt_hist = h.ex_kurtosis, exkurt_sim = kurtosis(x),
-     ar1_hist = h.ar1, ar1_sim = lag1(X))
-end)
-show_table(validation; title = "One-year moments: historical $(span(p.boot_period)) vs simulated steady state")
-```
-
-```{julia}
-labels = String.(val_vars)
-C_hist = Matrix(hist_cor[indexin(labels, hist_cor.variable), labels])
-C_sim = cor(reduce(hcat, pooled(ss_all[v]) for v in val_vars))
-diff_table = DataFrame(C_sim .- C_hist, labels)
-insertcols!(diff_table, 1, :variable => labels)
-sim_table = DataFrame(C_sim, labels)
-insertcols!(sim_table, 1, :variable => labels)
-show_table(sim_table; title = "Simulated correlations (steady state, pooled)")
-show_table(diff_table; title = "Simulated minus historical correlations")
-```

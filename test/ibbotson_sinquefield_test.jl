@@ -289,10 +289,12 @@ end
         @test p.start_year == 2021 && p.last_year == 2020
         @test p.ar_period == (1981, 2020) && p.boot_period == (1990, 2020)
         @test p.erp_target == 0.04
-        @test [a.variable for a in p.ar1] == ["π", "r", "tp"]
-        @test p.ar1[2].n == 39
-        @test p.ar1[2].phi == fits[2].φ && p.ar1[2].se_phi == fits[2].se[2]
-        @test p.ar1[3].sigma == fits[3].σ && p.ar1[3].r2 == fits[3].r2
+        m = p.model_params
+        @test [a.variable for a in m] == ["π", "r", "tp", "erp"]
+        @test m[2].n == 39
+        @test m[2].phi == fits[2].φ && m[2].se_phi == fits[2].se[2]
+        @test m[3].sigma == fits[3].σ && m[3].r2 == fits[3].r2
+        @test m[4].c == 0.04 && m[4].phi == 0.0 && ismissing(m[4].se_c) && ismissing(m[4].n)
 
         other = fit_ar1(fits[1].fitted; years = 1982:2020)
         @test_throws ArgumentError save_issm_params(joinpath(dir, "bad.yaml"); ar_π = other,

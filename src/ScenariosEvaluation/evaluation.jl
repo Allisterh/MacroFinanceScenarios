@@ -1,4 +1,4 @@
-# Scenario evaluation: per-path moments, correlations, horizon percentiles, fan charts and
+# Scenario evaluation: per-path moments and correlations, horizon percentiles, fan charts and
 # drawdowns of simulated `Scenarios` (n_vars × T × n_scen, log units). Like the EDA
 # helpers, every table function returns a labelled DataFrame and never prints; use
 # `EDA.print_table` for the output.
@@ -50,42 +50,58 @@ end
 path_moments(sc::Scenarios; hist = nothing, probs = DEFAULT_PROBS) =
     [name => path_moments(sc, name; hist, probs) for name in sc.names]
 
-"""
-    scenarios_correlations(sc::Scenarios; hist=nothing, probs=(0.05, 0.95), digits=2) -> DataFrame
-
-Correlations of the variables of `sc` computed within each path (over time), as a table of
-strings with the row labels in the first column:
-
-- lower triangle: mean across paths and the `probs` percentiles, `"0.30 (0.12, 0.44)"`;
-- upper triangle: the historical correlation from `hist` (an `EDA.correlation_table`,
-  matched by variable name), `""` without `hist` or if a variable is not in it;
-- diagonal: `"1"`.
-
-Numbers are rounded to `digits` decimals here, so print the result as is.
-"""
-function scenarios_correlations(sc::Scenarios; hist = nothing, probs = (0.05, 0.95), digits::Int = 2)
+# n × n × n_scen correlations of the variables of `sc`, computed within each path over time.
+function path_correlation_array(sc::Scenarios)
     n, T, n_scen = size(sc.data)
     T >= 2 || throw(ArgumentError("correlations need at least 2 simulated years"))
-    length(probs) == 2 || throw(ArgumentError("probs must hold two probabilities, got $probs"))
     C = Array{Float64,3}(undef, n, n, n_scen)
     for s in 1:n_scen
         C[:, :, s] = cor(permutedims(@view sc.data[:, :, s]))
     end
+    return C
+end
 
+"""
+    path_correlations(sc::Scenarios; hist=nothing, probs=[0.05, 0.25, 0.5, 0.75, 0.95]) -> DataFrame
+
+Correlations of each pair of variables of `sc` computed within each path (over time),
+summarised across scenarios: one row per pair `var1`, `var2` in lower-triangle order
+(column by column of the correlation matrix), columns `mean` and the percentiles `probs`.
+
+`hist` is an optional `EDA.correlation_table` (matched by variable name): it adds a column
+`historical` after `var2` and a last column `hist_rank`, the share of paths with a
+correlation at or below the historical one; both `missing` for a pair not in `hist`.
+"""
+function path_correlations(sc::Scenarios; hist = nothing, probs = DEFAULT_PROBS)
+    C = path_correlation_array(sc)
+    n = length(sc.names)
     labels = String.(sc.names)
-    fmt(x) = Printf.format(Printf.Format("%.$(digits)f"), x)
-    function hist_cell(a, b)
-        hist === nothing && return ""
-        i = findfirst(==(a), String.(hist.variable))
-        (i === nothing || !(b in names(hist))) && return ""
-        return fmt(hist[i, b])
+    pairs = [(i, j) for j in 1:n for i in j+1:n]
+    df = DataFrame([(; :var1 => labels[j], :var2 => labels[i], summary_pairs(C[i, j, :], probs)...)
+                    for (i, j) in pairs])
+    if hist !== nothing
+        function hist_value(a, b)
+            k = findfirst(==(a), String.(hist.variable))
+            return k === nothing || !(b in names(hist)) ? missing : hist[k, b]
+        end
+        h = [hist_value(labels[j], labels[i]) for (i, j) in pairs]
+        insertcols!(df, 3, :historical => h)
+        df.hist_rank = [ismissing(x) ? missing : mean(<=(x), C[i, j, :])
+                        for (x, (i, j)) in zip(h, pairs)]
     end
-    cells = [i == j ? "1" :
-             i > j ? (c = C[i, j, :]; q = quantile(c, collect(probs));
-                      "$(fmt(mean(c))) ($(fmt(q[1])), $(fmt(q[2])))") :
-             hist_cell(labels[i], labels[j])
-             for i in 1:n, j in 1:n]
-    df = DataFrame(cells, labels)
+    return df
+end
+
+"""
+    mean_path_correlations(sc::Scenarios) -> DataFrame
+
+Mean across paths of the within-path correlation matrices of `sc` (the `mean` column of
+`path_correlations` as a matrix), in the layout of `EDA.correlation_table`: column
+`variable` with the row labels, then one column per variable.
+"""
+function mean_path_correlations(sc::Scenarios)
+    labels = String.(sc.names)
+    df = DataFrame(dropdims(mean(path_correlation_array(sc); dims = 3); dims = 3), labels)
     insertcols!(df, 1, :variable => labels)
     return df
 end

@@ -25,10 +25,10 @@ include(joinpath(@__DIR__, "IbbotsonSinquefield", "IbbotsonSinquefield.jl"))
 
 module ScenariosEvaluation
 
-    export path_moments, scenarios_correlations, horizon_values, horizon_percentiles, fan
+    export path_moments, path_correlations, mean_path_correlations, horizon_values, horizon_percentiles, fan
     export max_drawdown_and_length, drawdown_table, annualise, period_percentiles
 
-    using DataFrames, Printf, Statistics, StatsBase
+    using DataFrames, Statistics, StatsBase
     using Plots: plot, plot!
     using ..IbbotsonSinquefield: Scenarios
     include(joinpath(@__DIR__, "ScenariosEvaluation", "evaluation.jl"))

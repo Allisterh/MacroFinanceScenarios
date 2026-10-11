@@ -31,17 +31,17 @@ issm_eda.ipynb  ──estimates, writes──▶  specs/<spec>/ ──read by─
 ```yaml
 ar_period: [1935, 2025]
 boot_period: [1935, 2025]
-erp_target: 0.04
 last_year: 2025                 # simulation starts in last_year + 1
-variables: [π, r, tp, erp]
-y0: [0.027, 0.015, 0.004, 0.08] # initial state = last observation of [π, r, tp, erp]
-c:   [...]                      # VAR intercepts (is_coefficients)
-phi: [..., ..., ..., 0.0]       # diagonal of A
-ar1:                            # for the presentation table only
-  π:  {n: 90, c: ..., se_c: ..., phi: ..., se_phi: ..., sigma: ..., r2: ...}
-  r:  {...}
-  tp: {...}
+y0: {π: 0.027, r: 0.015, tp: 0.004, erp: 0.08}  # initial state = last observation
+model_params:                   # y_t = c + phi y_{t-1} + u_t
+  π:   {n: 90, c: ..., se_c: ..., phi: ..., se_phi: ..., sigma: ..., r2: ...}  # AR(1) fit
+  r:   {...}
+  tp:  {...}
+  erp: {c: 0.04, phi: 0.0}      # c = erp_target, i.i.d.
 ```
+
+Each value is stored once: `load_issm_params` builds `c` and `A` from the `c` and `phi`
+entries of `model_params`; the same entries feed the report's AR(1) table.
 
 - Add `save_issm_params(path; ...)` / `load_issm_params(path) -> (; c, A, names, y0, start_year, ar_table, ...)`
   to `IbbotsonSinquefield` (new `io.jl`), so the schema lives in one place and has a
@@ -137,20 +137,22 @@ If `hist` is given, insert column `historical` after `statistic`, taken from the
 `describe_series` column names). Missing variable → `missing`, not an error (e.g. `erp`
 uses `erp_target` by design, still present).
 
-## 8. `mean_correlations` → `scenarios_correlations`
+## 8. `mean_correlations` → `path_correlations`, `mean_path_correlations`
 
 ```julia
-scenarios_correlations(sc; hist = nothing, probs = (0.05, 0.95), digits = 2) -> DataFrame
+path_correlations(sc; hist = nothing, probs = DEFAULT_PROBS) -> DataFrame
+mean_path_correlations(sc) -> DataFrame
 ```
 
-- Per-path correlation matrices (`n × n × n_scen`).
-- Lower triangle: `"0.30 (0.12, 0.44)"` = mean across paths and the `probs` percentiles.
-- Upper triangle: historical correlation from `hist` (a `correlation_table` DataFrame,
-  matched by variable name), `""` if `hist` is `nothing`.
-- Diagonal: `"1"`.
-- Cells are strings, so formatting happens here (`digits`), not in `print_table`.
-  Update the export list, docstring and tests (ordering, bracket values on a small
-  hand-checked example).
+- Per-path correlation matrices (`n × n × n_scen`, `path_correlation_array`).
+- `path_correlations`: one row per pair `var1, var2` (lower triangle, column by column),
+  columns `mean` and percentiles via `summary_pairs`, like `path_moments`. With `hist` (a
+  `correlation_table`, matched by name): `historical` after `var2` and a last column
+  `hist_rank` (share of paths ≤ historical); `missing` for pairs not in `hist`.
+- `mean_path_correlations`: mean across paths as a numeric matrix in the
+  `correlation_table` layout, to scan against the historical matrix.
+- Numeric output, formatted by `print_table`. Replaces the string matrix
+  `scenarios_correlations` (lower triangle sim, upper hist), which is removed.
 
 ## 9. Horizon percentiles: one table per variable
 
@@ -180,7 +182,7 @@ each series (e.g. `re` → `μ_π + μ_r + erp_target`, real → minus `μ_π`).
 1. `data.jl` real returns + `returns_from_components` rename (+ tests).
 2. `io.jl` save/load params, add `YAML`, `CSV` to `Project.toml` (+ round-trip test).
 3. `ScenariosEvaluation`: `fan`, `horizon_values(simple = true)`, `path_moments(hist)`,
-   `scenarios_correlations` (+ tests). Run `julia --project -e 'using Pkg; Pkg.test()'`.
+   `path_correlations`, `mean_path_correlations` (+ tests). Run `julia --project -e 'using Pkg; Pkg.test()'`.
 4. EDA: new vars, fix stale `tp` description in the *Load data* cell (still says "term
    spread"; it is now `rb − rf`), replace *Conclusions* with an *Export* section that loops
    over the three specs and writes `specs/<spec>/`.
@@ -194,3 +196,16 @@ each series (e.g. `re` → `μ_π + μ_r + erp_target`, real → minus `μ_π`).
   (same seed, same `U`, same `c`, `A`, `y0`, up to float round-trip through YAML/CSV),
   apart from the new/renamed tables.
 - Tests pass.
+
+
+
+
+## Do zmiany
+- poprawa średniej erp
+- za maly drawdown equity
+- do decyzji, czy nie pokazywac returns miedzy okresami 
+- dodac do eda max drawdown and max drowdown changes
+- refactor scenario post procesing, for steps , estimate returns_from components, tranform with tranfrom function for annalised and welath, ??
+- don't save and load ar_residuals
+- save issm params should change params format, it should be computed in eda
+

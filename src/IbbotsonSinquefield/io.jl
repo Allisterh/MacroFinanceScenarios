@@ -12,10 +12,11 @@ yaml_list(xs) = "[" * join(yaml_value.(xs), ", ") * "]"
     save_issm_params(path; ar_π, ar_r, ar_tp, erp_target, boot_period, y0, last_year)
 
 Write the Ibbotson–Sinquefield specification to the YAML file `path`, in decimals: the
-estimation windows, `erp_target`, the starting point `y0` (state `[π, r, tp, erp]` in
-`last_year`), the VAR intercepts `c` and lag diagonal `phi` from `is_coefficients`, and the
-AR(1) fits (`n, c, se_c, phi, se_phi, sigma, r2`) for presentation. The AR window is read
-from the fits, which must share it. `load_issm_params` reads the file back.
+estimation windows, the starting point `y0` (state `[π, r, tp, erp]` in `last_year`) and
+`model_params`, one entry per state variable. π, r and tp hold their AR(1) fits
+(`n, c, se_c, phi, se_phi, sigma, r2`); erp holds only `c = erp_target` and `phi = 0`. Each
+value is stored once: `load_issm_params` builds the VAR intercepts and lags from the `c` and
+`phi` entries. The AR window is read from the fits, which must share it.
 """
 function save_issm_params(path::AbstractString; ar_π::AR1, ar_r::AR1, ar_tp::AR1,
                           erp_target::Real, boot_period::Tuple{Integer,Integer},
@@ -25,24 +26,19 @@ function save_issm_params(path::AbstractString; ar_π::AR1, ar_r::AR1, ar_tp::AR
         throw(ArgumentError("the AR(1) fits have different periods: $([f.period for f in fits])"))
     length(y0) == length(ISSM_NAMES) ||
         throw(DimensionMismatch("y0 has length $(length(y0)), expected $(length(ISSM_NAMES))"))
-    c, A, _ = is_coefficients(ar_π, ar_r, ar_tp; erp_target)
+    yaml_map(ks, vs) = "{" * join(("$k: $(yaml_value(v))" for (k, v) in zip(ks, vs)), ", ") * "}"
 
     open(path, "w") do io
         println(io, "# Ibbotson–Sinquefield specification, decimal log units (save_issm_params)")
         println(io, "ar_period: ", yaml_list(ar_π.period))
         println(io, "boot_period: ", yaml_list(boot_period))
-        println(io, "erp_target: ", yaml_value(erp_target))
         println(io, "last_year: ", yaml_value(last_year), "  # simulation starts in last_year + 1")
-        println(io, "variables: [", join(ISSM_NAMES, ", "), "]")
-        println(io, "y0: ", yaml_list(y0), "  # state in last_year")
-        println(io, "c: ", yaml_list(c), "  # VAR intercepts")
-        println(io, "phi: ", yaml_list(diag(A)), "  # diagonal of A")
-        println(io, "ar1:  # AR(1) fits, for presentation")
+        println(io, "y0: ", yaml_map(ISSM_NAMES, y0), "  # state in last_year")
+        println(io, "model_params:  # y_t = c + phi y_{t-1} + u_t; AR(1) fits on ar_period, erp i.i.d. around c")
         for (name, f) in pairs(fits)
-            vals = (length(f.resid), f.c, f.se[1], f.φ, f.se[2], f.σ, f.r2)
-            println(io, "  ", name, ": {",
-                    join(("$k: $(yaml_value(v))" for (k, v) in zip(AR1_FIELDS, vals)), ", "), "}")
+            println(io, "  ", name, ": ", yaml_map(AR1_FIELDS, (length(f.resid), f.c, f.se[1], f.φ, f.se[2], f.σ, f.r2)))
         end
+        println(io, "  erp: ", yaml_map((:c, :phi), (erp_target, 0.0)))
     end
     return path
 end
@@ -52,21 +48,23 @@ end
 
 Read a specification written by `save_issm_params`. Fields: `names` (state variables),
 `c`, `A` (diagonal lag matrix), `y0`, `start_year = last_year + 1`, `last_year`,
-`ar_period`, `boot_period`, `erp_target` and `ar1`, a vector of NamedTuples
-`(variable, n, c, se_c, phi, se_phi, sigma, r2)`, one per AR(1) (a Tables.jl table).
+`ar_period`, `boot_period`, `erp_target` (the erp intercept) and `model_params`, a vector of
+NamedTuples `(variable, n, c, se_c, phi, se_phi, sigma, r2)`, one per state variable (a
+Tables.jl table); the AR(1) statistics of erp are `missing`.
 """
 function load_issm_params(path::AbstractString)
     d = YAML.load_file(path)
-    names = Symbol.(d["variables"])
-    c = Float64.(d["c"])
-    A = Matrix{Float64}(Diagonal(Float64.(d["phi"])))
-    check_var_dims(c, A, names)
+    names = copy(ISSM_NAMES)
+    model_params = [(; variable = String(v), (k => get(d["model_params"][String(v)], String(k), missing)
+                                               for k in AR1_FIELDS)...)
+                    for v in names]
+    c = Float64[m.c for m in model_params]
+    A = Matrix{Float64}(Diagonal(Float64[m.phi for m in model_params]))
+    y0 = [Float64(d["y0"][String(n)]) for n in names]
     period(x) = (Int(x[1]), Int(x[2]))
-    ar1 = [(; variable = String(v), (k => d["ar1"][v][String(k)] for k in AR1_FIELDS)...)
-           for v in ("π", "r", "tp")]
-    return (; names, c, A, y0 = Float64.(d["y0"]), start_year = Int(d["last_year"]) + 1,
+    return (; names, c, A, y0, start_year = Int(d["last_year"]) + 1,
             last_year = Int(d["last_year"]), ar_period = period(d["ar_period"]),
-            boot_period = period(d["boot_period"]), erp_target = Float64(d["erp_target"]), ar1)
+            boot_period = period(d["boot_period"]), erp_target = c[end], model_params)
 end
 
 """
