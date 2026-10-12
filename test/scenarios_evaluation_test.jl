@@ -19,7 +19,7 @@ using DataFrames: DataFrame, Not
 
     @testset "path_moments" begin
         pm = path_moments(sc, :c)
-        @test pm.statistic == ["mean", "std", "skewness", "ex_kurtosis", "ar1"]
+        @test pm.statistic == ["mean", "std", "skewness", "ex_kurtosis", "ar1", "neg"]
         @test propertynames(pm) == [:statistic, :mean, :p5, :p25, :p50, :p75, :p95]
         X = sc[:c]
         means = vec(mean(X; dims = 1))
@@ -28,19 +28,20 @@ using DataFrames: DataFrame, Not
         @test pm[2, :mean] ≈ mean(std.(eachcol(X)))
         @test pm[4, :p50] ≈ median(kurtosis.(eachcol(X)))
         @test pm[5, :mean] ≈ mean(autocor(x, [1])[1] for x in eachcol(X))
+        @test pm[6, :mean] ≈ 100 * mean(X .< 0)
         all_pm = path_moments(sc)
         @test first.(all_pm) == [:a, :b, :c]
         @test last(all_pm[3]) == pm
 
         hist = DataFrame(variable = ["c", "a"], mean = [0.07, 0.03], std = [0.17, 0.02],
                          skewness = [-0.5, 0.1], ex_kurtosis = [1.0, 0.0], ar1 = [0.0, 0.6],
-                         min = [-0.4, 0.0])
+                         neg = [30.0, 10.0], min = [-0.4, 0.0])
         ph = path_moments(sc, :c; hist)
         @test propertynames(ph) == [:statistic, :historical, :mean, :p5, :p25, :p50, :p75, :p95]
-        @test ph.historical == [0.07, 0.17, -0.5, 1.0, 0.0]
+        @test ph.historical == [0.07, 0.17, -0.5, 1.0, 0.0, 30.0]
         @test ph[:, Not(:historical)] == pm
         @test all(ismissing, path_moments(sc, :b; hist).historical)
-        @test last(path_moments(sc; hist)[1]).historical == [0.03, 0.02, 0.1, 0.0, 0.6]
+        @test last(path_moments(sc; hist)[1]).historical == [0.03, 0.02, 0.1, 0.0, 0.6, 10.0]
     end
 
     @testset "path correlations" begin

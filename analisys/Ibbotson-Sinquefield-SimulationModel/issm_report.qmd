@@ -44,7 +44,7 @@ show_table(t; title = "", digits = 2) =
 
 # Everything loaded and computed is in decimal log units; the report shows percent. Means,
 # std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations
-# do not.
+# do not, and `neg` (share of negative values) is already in percent.
 pct(sc::Scenarios) = Scenarios(100 .* sc.data, sc.names, sc.start_year)
 function pct(df::DataFrame; cols)
     out = copy(df)
@@ -169,7 +169,7 @@ plot(fans([:π, :r, :rf, :tp]; kind = :level, simple = true, scale = 100)...;
 
 Statistics computed within each simulated path, then summarised across scenarios; the
 `historical` column is the bootstrap sample (`erp` differs by design: its simulated mean is
-`erp_target`).
+`erp_target`). `neg` is the percent of years with a negative value.
 
 ```{julia}
 for (label, s) in (("components", sc), ("nominal returns", nom), ("real returns", rl))
@@ -226,18 +226,19 @@ horizon_tables([:π, :rf, :r]; kind = :level, label = "level in year h (simple r
 ### Drawdowns
 
 Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years),
-per path over the `{julia} T`-year horizon.
+per path over the first `horizon` simulated years (50 by default).
 
 ```{julia}
-function dd_table(s)
-    t = drawdown_table(s)
+function dd_table(s; horizon = 50)
+    horizon <= size(s.data, 2) || throw(ArgumentError("horizon $horizon exceeds the $(size(s.data, 2)) simulated years"))
+    t = drawdown_table(Scenarios(s.data[:, 1:horizon, :], s.names, s.start_year))
     rows = t.statistic .== "max_drawdown"
     num = names(t, Not([:variable, :statistic]))
     t[rows, num] .*= 100
     return t
 end
-show_table(dd_table(nom); title = "Nominal")
-show_table(dd_table(rl); title = "Real")
+show_table(dd_table(nom); title = "Nominal, first 50 years")
+show_table(dd_table(rl); title = "Real, first 50 years")
 ```
 
 

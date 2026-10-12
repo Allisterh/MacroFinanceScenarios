@@ -20,7 +20,7 @@ summary_pairs(x::AbstractVector, probs) =
     path_moments(sc::Scenarios; hist=nothing, probs) -> Vector{Pair{Symbol,DataFrame}}
 
 Moments of variable `name` computed within each simulated path (mean, std, skewness,
-excess kurtosis, lag-1 autocorrelation), summarised across scenarios: one row per
+excess kurtosis, lag-1 autocorrelation, `neg`: percent of negative values), summarised across scenarios: one row per
 statistic, columns `mean` and the percentiles `probs` of that statistic. Without `name`,
 one table per variable of `sc`, in order.
 
@@ -36,7 +36,8 @@ function path_moments(sc::Scenarios, name::Symbol; hist = nothing, probs = DEFAU
              :std => std.(paths),
              :skewness => skewness.(paths),
              :ex_kurtosis => kurtosis.(paths),          # StatsBase.kurtosis is excess kurtosis
-             :ar1 => [autocor(x, [1])[1] for x in paths]]
+             :ar1 => [autocor(x, [1])[1] for x in paths],
+             :neg => [100 * mean(<(0), x) for x in paths]]
     rows = [(; :statistic => String(s), summary_pairs(v, probs)...) for (s, v) in stats]
     df = DataFrame(rows)
     if hist !== nothing

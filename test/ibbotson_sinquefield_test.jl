@@ -118,6 +118,7 @@ end
     @test d.std ≈ [std(x), std(y)]
     @test d.ex_kurtosis ≈ [kurtosis(x), kurtosis(y)]
     @test d.ar1 ≈ [autocor(x, [1])[1], autocor(y, [1])[1]]
+    @test d.neg ≈ [200 / 7, 0.0]
     @test d.p50 ≈ [median(x), median(y)]
     @test d.min == [minimum(x), minimum(y)] && d.max == [maximum(x), maximum(y)]
 

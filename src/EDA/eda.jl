@@ -6,7 +6,7 @@
     describe_series(ta::TimeArray) -> DataFrame
 
 One row per column of `ta` with mean, std, skewness, excess kurtosis, lag-1
-autocorrelation, min, p25, p50, p75 and max.
+autocorrelation, `neg` (percent of negative values), min, p25, p50, p75 and max.
 """
 function describe_series(ta::TimeArray)
     rows = map(colnames(ta)) do name
@@ -14,7 +14,7 @@ function describe_series(ta::TimeArray)
         q = quantile(x, [0.0, 0.25, 0.5, 0.75, 1.0])
         (variable = String(name), mean = mean(x), std = std(x),
          skewness = skewness(x), ex_kurtosis = kurtosis(x),   # StatsBase.kurtosis is excess kurtosis
-         ar1 = autocor(x, [1])[1],
+         ar1 = autocor(x, [1])[1], neg = 100 * mean(<(0), x),
          min = q[1], p25 = q[2], p50 = q[3], p75 = q[4], max = q[5])
     end
     return DataFrame(rows)

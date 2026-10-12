@@ -2299,7 +2299,7 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Everything loaded and computed is in decimal log units; the report shows percent. Means,</span></span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="co"># std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="co"># do not.</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="co"># do not, and `neg` (share of negative values) is already in percent.</span></span>
 <span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="fu">pct</span>(sc<span class="op">::</span><span class="dt">Scenarios</span>) <span class="op">=</span> <span class="fu">Scenarios</span>(<span class="fl">100</span> <span class="op">.*</span> sc.data, sc.names, sc.start_year)</span>
 <span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">pct</span>(df<span class="op">::</span><span class="dt">DataFrame</span>; cols)</span>
 <span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> <span class="fu">copy</span>(df)</span>
@@ -2620,7 +2620,7 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <h2 class="anchored" data-anchor-id="evaluation">Evaluation</h2>
 <section id="per-path-moments" class="level3">
 <h3 class="anchored" data-anchor-id="per-path-moments">Per-path moments</h3>
-<p>Statistics computed within each simulated path, then summarised across scenarios; the <code>historical</code> column is the bootstrap sample (<code>erp</code> differs by design: its simulated mean is <code>erp_target</code>).</p>
+<p>Statistics computed within each simulated path, then summarised across scenarios; the <code>historical</code> column is the bootstrap sample (<code>erp</code> differs by design: its simulated mean is <code>erp_target</code>). <code>neg</code> is the percent of years with a negative value.</p>
 <div id="20" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
@@ -2708,6 +2708,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.56</td>
 <td style="text-align: right;">0.63</td>
 </tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">2.16</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">2.0</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">6.0</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2788,6 +2798,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.52</td>
 <td style="text-align: right;">0.58</td>
 <td style="text-align: right;">0.65</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">39.22</td>
+<td style="text-align: right;">50.12</td>
+<td style="text-align: right;">36.0</td>
+<td style="text-align: right;">44.0</td>
+<td style="text-align: right;">50.0</td>
+<td style="text-align: right;">56.0</td>
+<td style="text-align: right;">64.0</td>
 </tr>
 </tbody>
 </table>
@@ -2870,6 +2890,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.0</td>
 <td style="text-align: right;">0.1</td>
 </tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">39.22</td>
+<td style="text-align: right;">42.18</td>
+<td style="text-align: right;">34.0</td>
+<td style="text-align: right;">39.0</td>
+<td style="text-align: right;">42.0</td>
+<td style="text-align: right;">45.0</td>
+<td style="text-align: right;">50.0</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2950,6 +2980,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">-0.01</td>
 <td style="text-align: right;">0.05</td>
 <td style="text-align: right;">0.16</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">23.53</td>
+<td style="text-align: right;">31.96</td>
+<td style="text-align: right;">24.0</td>
+<td style="text-align: right;">29.0</td>
+<td style="text-align: right;">32.0</td>
+<td style="text-align: right;">35.0</td>
+<td style="text-align: right;">40.0</td>
 </tr>
 </tbody>
 </table>
@@ -3032,6 +3072,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.58</td>
 <td style="text-align: right;">0.65</td>
 </tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">4.33</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">2.0</td>
+<td style="text-align: right;">4.0</td>
+<td style="text-align: right;">6.0</td>
+<td style="text-align: right;">10.0</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -3112,6 +3162,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">-0.04</td>
 <td style="text-align: right;">0.03</td>
 <td style="text-align: right;">0.13</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">19.61</td>
+<td style="text-align: right;">26.68</td>
+<td style="text-align: right;">20.0</td>
+<td style="text-align: right;">24.0</td>
+<td style="text-align: right;">27.0</td>
+<td style="text-align: right;">30.0</td>
+<td style="text-align: right;">34.0</td>
 </tr>
 </tbody>
 </table>
@@ -3194,6 +3254,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.06</td>
 <td style="text-align: right;">0.17</td>
 </tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">17.65</td>
+<td style="text-align: right;">25.02</td>
+<td style="text-align: right;">18.0</td>
+<td style="text-align: right;">22.0</td>
+<td style="text-align: right;">25.0</td>
+<td style="text-align: right;">28.0</td>
+<td style="text-align: right;">32.0</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -3274,6 +3344,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.52</td>
 <td style="text-align: right;">0.58</td>
 <td style="text-align: right;">0.65</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">39.22</td>
+<td style="text-align: right;">50.12</td>
+<td style="text-align: right;">36.0</td>
+<td style="text-align: right;">44.0</td>
+<td style="text-align: right;">50.0</td>
+<td style="text-align: right;">56.0</td>
+<td style="text-align: right;">64.0</td>
 </tr>
 </tbody>
 </table>
@@ -3356,6 +3436,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.09</td>
 <td style="text-align: right;">0.19</td>
 </tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">39.22</td>
+<td style="text-align: right;">42.68</td>
+<td style="text-align: right;">34.0</td>
+<td style="text-align: right;">39.0</td>
+<td style="text-align: right;">43.0</td>
+<td style="text-align: right;">46.0</td>
+<td style="text-align: right;">51.0</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -3436,6 +3526,16 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">-0.0</td>
 <td style="text-align: right;">0.07</td>
 <td style="text-align: right;">0.17</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">neg</td>
+<td style="text-align: right;">25.49</td>
+<td style="text-align: right;">32.15</td>
+<td style="text-align: right;">25.0</td>
+<td style="text-align: right;">29.0</td>
+<td style="text-align: right;">32.0</td>
+<td style="text-align: right;">35.0</td>
+<td style="text-align: right;">40.0</td>
 </tr>
 </tbody>
 </table>
@@ -5100,25 +5200,26 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 </section>
 <section id="drawdowns" class="level3">
 <h3 class="anchored" data-anchor-id="drawdowns">Drawdowns</h3>
-<p>Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years), per path over the 100-year horizon.</p>
+<p>Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years), per path over the first <code>horizon</code> simulated years (50 by default).</p>
 <div id="28" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">dd_table</span>(s)</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> <span class="fu">drawdown_table</span>(s)</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    rows <span class="op">=</span> t.statistic <span class="op">.==</span> <span class="st">&quot;max_drawdown&quot;</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    num <span class="op">=</span> <span class="fu">names</span>(t, <span class="fu">Not</span>([<span class="op">:</span>variable, <span class="op">:</span>statistic]))</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    t[rows, num] <span class="op">.*=</span> <span class="fl">100</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> t</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="fu">show_table</span>(<span class="fu">dd_table</span>(nom); title <span class="op">=</span> <span class="st">&quot;Nominal&quot;</span>)</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="fu">show_table</span>(<span class="fu">dd_table</span>(rl); title <span class="op">=</span> <span class="st">&quot;Real&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">dd_table</span>(s; horizon <span class="op">=</span> <span class="fl">50</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    horizon <span class="op">&lt;=</span> <span class="fu">size</span>(s.data, <span class="fl">2</span>) <span class="op">||</span> <span class="fu">throw</span>(<span class="fu">ArgumentError</span>(<span class="st">&quot;horizon </span><span class="sc">$</span>horizon<span class="st"> exceeds the </span><span class="sc">$</span>(<span class="fu">size</span>(s.data, <span class="fl">2</span>))<span class="st"> simulated years&quot;</span>))</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> <span class="fu">drawdown_table</span>(<span class="fu">Scenarios</span>(s.data[<span class="op">:</span>, <span class="fl">1</span><span class="op">:</span>horizon, <span class="op">:</span>], s.names, s.start_year))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    rows <span class="op">=</span> t.statistic <span class="op">.==</span> <span class="st">&quot;max_drawdown&quot;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    num <span class="op">=</span> <span class="fu">names</span>(t, <span class="fu">Not</span>([<span class="op">:</span>variable, <span class="op">:</span>statistic]))</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    t[rows, num] <span class="op">.*=</span> <span class="fl">100</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> t</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="fu">show_table</span>(<span class="fu">dd_table</span>(nom); title <span class="op">=</span> <span class="st">&quot;Nominal, first 50 years&quot;</span>)</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="fu">show_table</span>(<span class="fu">dd_table</span>(rl); title <span class="op">=</span> <span class="st">&quot;Real, first 50 years&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">Nominal</td>
+<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">Nominal, first 50 years</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">variable</th>
@@ -5145,62 +5246,62 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <tr class="dataRow odd">
 <td style="text-align: right;">rf</td>
 <td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">1.69</td>
+<td style="text-align: right;">1.03</td>
 <td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.02</td>
 <td style="text-align: right;">0.71</td>
-<td style="text-align: right;">1.36</td>
-<td style="text-align: right;">2.25</td>
-<td style="text-align: right;">4.55</td>
+<td style="text-align: right;">1.48</td>
+<td style="text-align: right;">3.44</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">rf</td>
 <td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">2.77</td>
+<td style="text-align: right;">1.8</td>
 <td style="text-align: right;">0.0</td>
 <td style="text-align: right;">1.0</td>
-<td style="text-align: right;">2.0</td>
-<td style="text-align: right;">4.0</td>
-<td style="text-align: right;">7.0</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">5.0</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">rb</td>
 <td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">21.29</td>
-<td style="text-align: right;">13.44</td>
+<td style="text-align: right;">17.66</td>
+<td style="text-align: right;">8.53</td>
+<td style="text-align: right;">13.82</td>
 <td style="text-align: right;">16.17</td>
-<td style="text-align: right;">20.47</td>
-<td style="text-align: right;">24.95</td>
-<td style="text-align: right;">33.49</td>
+<td style="text-align: right;">21.23</td>
+<td style="text-align: right;">29.71</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">rb</td>
 <td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">9.2</td>
+<td style="text-align: right;">6.89</td>
+<td style="text-align: right;">3.0</td>
 <td style="text-align: right;">4.0</td>
 <td style="text-align: right;">6.0</td>
 <td style="text-align: right;">8.0</td>
-<td style="text-align: right;">11.0</td>
-<td style="text-align: right;">18.0</td>
+<td style="text-align: right;">14.0</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">re</td>
 <td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">50.09</td>
-<td style="text-align: right;">29.04</td>
-<td style="text-align: right;">41.86</td>
-<td style="text-align: right;">48.45</td>
-<td style="text-align: right;">57.65</td>
-<td style="text-align: right;">71.55</td>
+<td style="text-align: right;">41.78</td>
+<td style="text-align: right;">17.67</td>
+<td style="text-align: right;">30.69</td>
+<td style="text-align: right;">41.75</td>
+<td style="text-align: right;">50.36</td>
+<td style="text-align: right;">66.59</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">re</td>
 <td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">12.21</td>
+<td style="text-align: right;">8.66</td>
+<td style="text-align: right;">3.0</td>
 <td style="text-align: right;">5.0</td>
-<td style="text-align: right;">8.0</td>
+<td style="text-align: right;">7.0</td>
 <td style="text-align: right;">11.0</td>
-<td style="text-align: right;">15.0</td>
-<td style="text-align: right;">25.0</td>
+<td style="text-align: right;">19.0</td>
 </tr>
 </tbody>
 </table>
@@ -5209,7 +5310,7 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">Real</td>
+<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">Real, first 50 years</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">variable</th>
@@ -5236,62 +5337,62 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <tr class="dataRow odd">
 <td style="text-align: right;">r</td>
 <td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">38.47</td>
-<td style="text-align: right;">16.91</td>
-<td style="text-align: right;">27.19</td>
-<td style="text-align: right;">37.16</td>
-<td style="text-align: right;">48.71</td>
-<td style="text-align: right;">64.83</td>
+<td style="text-align: right;">26.56</td>
+<td style="text-align: right;">8.8</td>
+<td style="text-align: right;">16.68</td>
+<td style="text-align: right;">24.83</td>
+<td style="text-align: right;">34.87</td>
+<td style="text-align: right;">50.21</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">r</td>
 <td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">63.4</td>
-<td style="text-align: right;">23.0</td>
-<td style="text-align: right;">41.0</td>
-<td style="text-align: right;">63.0</td>
-<td style="text-align: right;">88.0</td>
-<td style="text-align: right;">99.0</td>
+<td style="text-align: right;">31.07</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">20.0</td>
+<td style="text-align: right;">31.0</td>
+<td style="text-align: right;">44.0</td>
+<td style="text-align: right;">50.0</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">rb_real</td>
 <td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">50.94</td>
-<td style="text-align: right;">29.31</td>
-<td style="text-align: right;">40.23</td>
-<td style="text-align: right;">49.66</td>
-<td style="text-align: right;">60.82</td>
-<td style="text-align: right;">76.84</td>
+<td style="text-align: right;">40.49</td>
+<td style="text-align: right;">19.99</td>
+<td style="text-align: right;">29.65</td>
+<td style="text-align: right;">38.72</td>
+<td style="text-align: right;">49.7</td>
+<td style="text-align: right;">66.62</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">rb_real</td>
 <td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">42.85</td>
-<td style="text-align: right;">14.0</td>
-<td style="text-align: right;">25.0</td>
-<td style="text-align: right;">37.0</td>
-<td style="text-align: right;">56.0</td>
-<td style="text-align: right;">91.0</td>
-</tr>
-<tr class="dataRow odd">
-<td style="text-align: right;">re_real</td>
-<td style="text-align: right;">max_drawdown</td>
-<td style="text-align: right;">58.28</td>
-<td style="text-align: right;">39.81</td>
-<td style="text-align: right;">48.45</td>
-<td style="text-align: right;">57.42</td>
-<td style="text-align: right;">67.4</td>
-<td style="text-align: right;">81.31</td>
-</tr>
-<tr class="dataRow even">
-<td style="text-align: right;">re_real</td>
-<td style="text-align: right;">max_dd_length</td>
-<td style="text-align: right;">23.75</td>
+<td style="text-align: right;">23.73</td>
 <td style="text-align: right;">8.0</td>
 <td style="text-align: right;">14.0</td>
-<td style="text-align: right;">20.0</td>
-<td style="text-align: right;">30.0</td>
-<td style="text-align: right;">52.0</td>
+<td style="text-align: right;">21.0</td>
+<td style="text-align: right;">32.0</td>
+<td style="text-align: right;">48.0</td>
+</tr>
+<tr class="dataRow odd">
+<td style="text-align: right;">re_real</td>
+<td style="text-align: right;">max_drawdown</td>
+<td style="text-align: right;">49.1</td>
+<td style="text-align: right;">25.64</td>
+<td style="text-align: right;">40.44</td>
+<td style="text-align: right;">47.96</td>
+<td style="text-align: right;">58.8</td>
+<td style="text-align: right;">74.97</td>
+</tr>
+<tr class="dataRow even">
+<td style="text-align: right;">re_real</td>
+<td style="text-align: right;">max_dd_length</td>
+<td style="text-align: right;">15.26</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: right;">8.0</td>
+<td style="text-align: right;">13.0</td>
+<td style="text-align: right;">19.0</td>
+<td style="text-align: right;">35.0</td>
 </tr>
 </tbody>
 </table>
