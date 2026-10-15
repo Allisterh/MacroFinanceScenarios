@@ -1,0 +1,10 @@
+# Ibbotson–Sinquefield specification, decimal log units (save_issm_params)
+ar_period: [1935, 2025]
+boot_period: [1935, 2025]
+last_year: 2025  # simulation starts in last_year + 1
+y0: {π: 0.026418736886390452, r: 0.015394765927019896, tp: 0.018834848269554456, erp: 0.08710010474584817}  # state in last_year
+model_params:  # y_t = c + phi y_{t-1} + u_t; AR(1) fits on ar_period, erp i.i.d. around 
+  π: {n: 90, c: 0.035, se_c: 0.00, phi: 0.0, se_phi: 0.00, sigma: 0.0, r2: 0.}
+  r: {n: 90, c: 0.00, se_c: 0.00, phi: 0.0, se_phi: 0.0, sigma: 0.0, r2: 0.30}
+  tp: {n: 90, c: 0.011, se_c: 0.00, phi: 0.0, se_phi: 0.0, sigma: 0.00, r2: 0.000}
+  erp: {c: 0.055, phi: 0.0}
