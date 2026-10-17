@@ -1,0 +1,225 @@
+---
+title: "Block-bootstrap scenarios of real returns"
+engine: julia
+format:
+  html:
+    embed-resources: true   # one self-contained file per render, figures included
+    toc: true
+    code-fold: true
+params:
+  # Capital market assumptions: target means of annual log real returns (decimals)
+  cma: {r: 0.005, rb_real: 0.015, re_real: 0.055}
+  period: [1935, 2025]      # historical sample bootstrapped
+  block_size: 5
+  random_block: true        # stationary bootstrap
+  T: 100
+  horizons: [1, 5, 10, 20, 30, 50]
+  n_scen: 10000
+  seed: 1234
+---
+
+```{julia}
+#| tags: [parameters]
+#| output: false
+# Defaults for running the cells outside Quarto. Under `quarto render` the front-matter
+# `params` (overridden by `-P name:value` or `--execute-params file.yml`, see
+# render_bb_reports.sh) are already defined as constants, so these assignments are skipped.
+@isdefined(cma) || (cma = Dict("r" => 0.005, "rb_real" => 0.015, "re_real" => 0.045))
+@isdefined(period) || (period = [1935, 2025])   # historical sample bootstrapped
+@isdefined(block_size) || (block_size = 5)      # (mean) block length in years
+@isdefined(random_block) || (random_block = true)  # stationary bootstrap
+@isdefined(T) || (T = 100)                      # simulated years
+@isdefined(horizons) || (horizons = [1, 5, 10, 20, 30, 50, 100])  # horizon table years, ≤ T
+@isdefined(n_scen) || (n_scen = 10000)
+@isdefined(seed) || (seed = 1234)
+```
+
+```{julia}
+#| output: false
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
+
+using MacroFinanceScenarios
+using MacroFinanceScenarios.IbbotsonSinquefield
+using MacroFinanceScenarios.EDA
+using MacroFinanceScenarios.ScenariosEvaluation
+using CSV, DataFrames, Random, Statistics, TimeSeries
+using Plots
+
+show_table(t; title = "", digits = 2) =
+    display(HTML(sprint(io -> print_table(io, t; backend = :html, digits, title))))
+
+# Everything loaded and computed is in decimal log units; the report shows percent. Means,
+# std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations
+# do not, and `neg` (share of negative values) is already in percent.
+pct(sc::Scenarios) = Scenarios(100 .* sc.data, sc.names, sc.start_year)
+function pct(df::DataFrame; cols)
+    out = copy(df)
+    for c in cols
+        out[!, c] = 100 .* out[!, c]
+    end
+    return out
+end
+moment_cols = [:mean, :std, :min, :p25, :p50, :p75, :max]   # describe_series columns in %
+span(p) = "$(p[1])–$(p[2])"
+
+vars = [:r, :rb_real, :re_real]
+# Quarto passes the `cma` mapping as a Dict{String}; match_means takes a NamedTuple and
+# rejects unknown names.
+targets = (; (Symbol(k) => Float64(v) for (k, v) in cma)...)
+```
+
+## Data and assumptions
+
+Annual real returns from `data/shiller_annual.csv` (written by `export_shiller_annual.jl`):
+the real T-bill return `r`, the real bond return `rb_real` and the real equity return
+`re_real`, `{julia} span(period)`. Each variable is shifted by a constant so that its sample
+mean equals the capital market assumption (CMA); std, skewness, autocorrelation and
+correlations are unchanged. The CMA are means of annual **log** returns: a simple expected
+return `E[R]` corresponds to roughly `log(1 + E[R]) − σ²/2`.
+
+```{julia}
+raw = TimeArray(CSV.File(joinpath(@__DIR__, "..", "..", "data", "shiller_annual.csv"));
+                timestamp = :timestamp)
+data = subperiod(raw[vars...], (period[1], period[2]))
+hist = match_means(data, targets)
+
+show_table(DataFrame(variable = String.(vars),
+                     historical_mean = [100mean(values(data[v])) for v in vars],
+                     cma_target = [100get(targets, v, mean(values(data[v]))) for v in vars],
+                     shift = [100(mean(values(hist[v])) - mean(values(data[v]))) for v in vars]);
+           title = "Means of annual log real returns (%)")
+show_table(DataFrame(parameter = ["sample", "years", "block size", "block lengths",
+                                  "simulated years", "scenarios", "seed"],
+                     value = [span(period), string(length(hist)), string(block_size),
+                              random_block ? "random (stationary bootstrap)" : "fixed",
+                              string(T), string(n_scen), string(seed)]);
+           title = "Parameters")
+```
+
+Units: returns and moments below are annual log values in percent, except where a table or
+chart says *simple rate* (`exp(·) − 1` of the log rate, in percent) or *wealth* (of 1
+invested); skewness, excess kurtosis, autocorrelations and correlations are unit-free.
+
+## Historical moments
+
+The matched sample that is bootstrapped (means = CMA targets).
+
+```{julia}
+hist_moments = describe_series(hist)
+hist_cor = correlation_table(hist)
+hist_pct = pct(hist_moments; cols = moment_cols)
+show_table(hist_pct; title = "Matched sample, $(span(period))")
+show_table(hist_cor; title = "Correlations, $(span(period))")
+```
+
+## Simulation
+
+Each simulated year is one whole historical year (so its cross-sectional correlation is
+kept), drawn in blocks of consecutive years (keeping autocorrelation up to the block
+length). Blocks are circular — they wrap from the last year to the first — so every year
+is drawn with the same probability and the simulated mean equals the CMA target in
+expectation. No moment matching is applied after the simulation: the gap between the
+achieved mean and the target is bootstrap noise, summarised by its standard error (std of
+the per-path means / √n_scen).
+
+```{julia}
+sc = block_bootstrap(hist, T, n_scen; block_size, random_block, rng = MersenneTwister(seed))
+path_means = dropdims(mean(sc.data; dims = 2); dims = 2)   # n_vars × n_scen
+achieved = DataFrame(variable = String.(sc.names),
+                     target = [100mean(values(hist[v])) for v in sc.names],
+                     simulated = 100vec(mean(path_means; dims = 2)),
+                     se = 100vec(std(path_means; dims = 2)) ./ sqrt(n_scen))
+achieved.z = (achieved.simulated .- achieved.target) ./ achieved.se
+show_table(achieved; title = "Mean over all years and paths vs. target (%)")
+println("Simulated years $(first(scenario_years(sc)))–$(last(scenario_years(sc))).")
+```
+
+## Fan charts
+
+5–95 and 25–75 percentile bands, median, and the CMA target (dashed).
+
+```{julia}
+μ_target = Dict(v => mean(values(hist[v])) for v in vars)
+fans(vars; kwargs...) = [fan(sc, v; μ = μ_target[v], μ_label = "CMA target", kwargs...) for v in vars]
+```
+
+### Cumulative wealth
+
+```{julia}
+#| fig-cap: "Wealth of 1 invested, real"
+plot(fans(vars; kind = :wealth)...; layout = (1, 3), size = (1000, 330), ylabel = "wealth")
+```
+
+### Annualised returns
+
+Geometric-average annual return over the first `h` years, `exp(sum(x_1..h)/h) − 1`.
+
+```{julia}
+#| fig-cap: "Annualised simple real rates"
+plot(fans(vars; kind = :annualised, simple = true, scale = 100)...;
+     layout = (1, 3), size = (1000, 330), ylabel = "%")
+```
+
+## Evaluation
+
+### Per-path moments
+
+Statistics computed within each simulated path, then summarised across scenarios; the
+`historical` column is the matched sample. `neg` is the percent of years with a negative
+value. Autocorrelation beyond a block is lost, so with a small `block_size` the within-path
+`ar1` is biased towards 0 relative to history.
+
+```{julia}
+for (name, t) in path_moments(pct(sc); hist = hist_pct)
+    show_table(t; title = String(name))
+end
+```
+
+### Correlations
+
+Correlations computed within each simulated path, then summarised across scenarios. The
+matrix is the mean across paths. In the pair table, `historical` is the correlation in the
+sample and `hist_rank` the share of paths with a correlation at or below it. Each path
+covers `{julia} T` years and the sample `{julia} length(hist)`, so the bands show what a
+`{julia} T`-year window looks like, not a test of the historical correlation.
+
+```{julia}
+show_table(mean_path_correlations(sc); title = "Mean within-path correlations")
+show_table(path_correlations(sc; hist = hist_cor); title = "Pairs")
+```
+
+### Horizon percentiles
+
+Annualised returns: the geometric-average annual return over `h` years,
+`exp(sum(x_1..h)/h) − 1`, in percent.
+
+```{julia}
+function horizon_tables(vars; kind, label)
+    for v in vars
+        t = select(horizon_percentiles(sc; vars = [v], horizons = filter(<=(T), horizons), kind,
+                                       simple = true), Not(:variable))
+        t = pct(t; cols = names(t, Not([:horizon, :year])))
+        show_table(t; title = "$v, $label")
+    end
+end
+horizon_tables(vars; kind = :annualised, label = "annualised (simple rate, %)")
+```
+
+### Drawdowns
+
+Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years),
+per path over the first `horizon` simulated years (50 by default, at most `T`).
+
+```{julia}
+function dd_table(s; horizon = 50)
+    horizon <= size(s.data, 2) || throw(ArgumentError("horizon $horizon exceeds the $(size(s.data, 2)) simulated years"))
+    t = drawdown_table(Scenarios(s.data[:, 1:horizon, :], s.names, s.start_year))
+    rows = t.statistic .== "max_drawdown"
+    num = names(t, Not([:variable, :statistic]))
+    t[rows, num] .*= 100
+    return t
+end
+dd_h = min(50, T)
+show_table(dd_table(sc; horizon = dd_h); title = "Real, first $dd_h years")
+```

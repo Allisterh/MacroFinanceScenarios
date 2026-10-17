@@ -115,6 +115,7 @@ using DataFrames: DataFrame, Not
     @testset "fan" begin
         @test fan(sc, :a) isa Plots.Plot
         @test fan(sc, :a; kind = :annualised, simple = true, μ = 0.03, scale = 100) isa Plots.Plot
+        @test fan(sc, :a; μ = 0.03, μ_label = "CMA target")[1][end][:label] == "CMA target"
         p = fan(sc, :c; kind = :wealth, μ = 0.07, yscale = :log10, title = "c")
         @test p isa Plots.Plot
         @test last(p.series_list)[:y] ≈ exp.((1:T) .* 0.07)  # reference curve exp(h μ)

@@ -315,3 +315,63 @@ end
         @test_throws DimensionMismatch save_residuals(joinpath(dir, "x.csv"), 2001:2006, U, [:π, :r, :tp, :erp])
     end
 end
+
+@testset "IbbotsonSinquefield match_means" begin
+    ta = TimeArray(Date(2001):Year(1):Date(2005), [1.0 10.0; 2.0 20.0; 3.0 30.0; 4.0 40.0; 5.0 50.0], [:re, :rb])
+    m = match_means(ta, (re = 0.05,))
+    @test mean(values(m[:re])) ≈ 0.05
+    @test values(m[:re]) ≈ values(ta[:re]) .- 2.95
+    @test values(m[:rb]) == values(ta[:rb])
+    @test colnames(m) == colnames(ta) && timestamp(m) == timestamp(ta)
+    @test_throws ArgumentError match_means(ta, (cape = 1.0,))
+
+    sc = Scenarios(reshape(collect(1.0:24.0), 2, 3, 4), [:re, :rb], 2026)
+    s = match_means(sc, (rb = 0.02,))
+    @test mean(s.data[2, :, :]) ≈ 0.02
+    @test s.data[1, :, :] == sc.data[1, :, :]
+    @test s.names == sc.names && s.start_year == sc.start_year
+end
+
+@testset "IbbotsonSinquefield block_bootstrap" begin
+    using Random: Xoshiro
+    n_obs = 20
+    X = [collect(1.0:n_obs) 100 .+ collect(1.0:n_obs) .^ 2]   # row i identifiable from column 1
+    rowidx(B) = Int.(B[1, :, :])                              # n_steps × n_scen sample rows
+
+    B = block_bootstrap(X, 50, 30; block_size = 4, rng = Xoshiro(1))
+    @test size(B) == (2, 50, 30)
+    @test all(B[:, t, s] == X[Int(B[1, t, s]), :] for t in 1:50, s in 1:30)   # rows kept whole
+
+    @testset "fixed blocks are consecutive rows (circular)" begin
+        idx = rowidx(B)
+        @test all(idx[t+1, s] == mod1(idx[t, s] + 1, n_obs) for t in 1:49, s in 1:30 if t % 4 != 0)
+        R = rowidx(block_bootstrap(X, n_obs, 20; block_size = n_obs, rng = Xoshiro(2)))
+        @test all(R[:, s] == mod1.(R[1, s] .+ (0:n_obs-1), n_obs) for s in 1:20)  # rotations
+    end
+
+    @testset "reproducible" begin
+        @test block_bootstrap(X, 30, 5; random_block = true, rng = Xoshiro(7)) ==
+              block_bootstrap(X, 30, 5; random_block = true, rng = Xoshiro(7))
+    end
+
+    @testset "unbiased mean and mean block length" begin
+        M = block_bootstrap(X, 100, 2000; block_size = 5, random_block = true, rng = Xoshiro(3))
+        @test mean(M[1, :, :]) ≈ mean(X[:, 1]) atol = 0.2
+        @test vec(mean(M; dims = (2, 3))) ≈ vec(mean(X; dims = 1)) rtol = 0.02
+        Y = reshape(collect(1.0:50), :, 1)
+        idx = rowidx(block_bootstrap(Y, 20_000, 1; block_size = 5, random_block = true, rng = Xoshiro(4)))
+        breaks = count(idx[t+1] != mod1(idx[t] + 1, 50) for t in 1:length(idx)-1)
+        @test length(idx) / (breaks + 1) ≈ 5 rtol = 0.1
+    end
+
+    @testset "TimeArray method" begin
+        ta = TimeArray(Date(2001):Year(1):Date(2020), X, [:a, :b])
+        sc = block_bootstrap(ta, 15, 3; block_size = 2, rng = Xoshiro(5))
+        @test sc isa Scenarios
+        @test size(sc.data) == (2, 15, 3) && sc.names == [:a, :b] && sc.start_year == 2021
+        @test block_bootstrap(ta, 5, 2; start_year = 1990).start_year == 1990
+    end
+
+    @test_throws ArgumentError block_bootstrap(X, 10, 2; block_size = 0)
+    @test_throws ArgumentError block_bootstrap(X, 10, 2; block_size = n_obs + 1)
+end

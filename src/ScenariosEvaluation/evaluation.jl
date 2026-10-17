@@ -160,8 +160,8 @@ function horizon_percentiles(sc::Scenarios; vars = sc.names, horizons = [1, 5, 1
 end
 
 """
-    fan(sc::Scenarios, name; kind=:level, simple=false, μ=nothing, scale=1.0,
-        title=String(name), yscale=:identity) -> Plots.Plot
+    fan(sc::Scenarios, name; kind=:level, simple=false, μ=nothing, μ_label="uncond. mean",
+        scale=1.0, title=String(name), yscale=:identity) -> Plots.Plot
 
 Fan chart of variable `name` over the simulated years: 5–95 and 25–75 percentile bands and
 the median of `horizon_values(sc[name], h; kind, simple)` for every `h`, multiplied by
@@ -169,10 +169,12 @@ the median of `horizon_values(sc[name], h; kind, simple)` for every `h`, multipl
 
 `μ` is an optional reference line in log units (e.g. the unconditional mean), drawn dashed
 at `μ` for `:level`/`:annualised`, `exp(μ) − 1` with `simple = true`, and along `exp(h μ)`
-for `:wealth`. `yscale` is passed to Plots, e.g. `:log10` for long wealth fans.
+for `:wealth`, and labelled `μ_label` (e.g. "CMA target"). `yscale` is passed to Plots,
+e.g. `:log10` for long wealth fans.
 """
 function fan(sc::Scenarios, name::Symbol; kind::Symbol = :level, simple::Bool = false,
-             μ::Union{Real,Nothing} = nothing, scale::Real = 1.0, title = String(name),
+             μ::Union{Real,Nothing} = nothing, μ_label = "uncond. mean", scale::Real = 1.0,
+             title = String(name),
              yscale::Symbol = :identity)
     q = horizon_percentiles(sc; vars = [name], horizons = 1:size(sc.data, 2), kind, simple)
     yrs = q.year
@@ -183,7 +185,7 @@ function fan(sc::Scenarios, name::Symbol; kind::Symbol = :level, simple::Bool = 
     plot!(p, yrs, scale .* q.p50; lw = 2, color = 1, label = "median")
     if μ !== nothing
         ref = kind === :wealth ? exp.(q.horizon .* μ) : fill(simple ? expm1(μ) : float(μ), length(yrs))
-        plot!(p, yrs, scale .* ref; ls = :dash, color = :black, label = "uncond. mean")
+        plot!(p, yrs, scale .* ref; ls = :dash, color = :black, label = μ_label)
     end
     return p
 end
