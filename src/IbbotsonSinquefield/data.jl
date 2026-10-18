@@ -3,7 +3,7 @@
 # first full year is one year after the first December in the data (Data2 starts 1934-01,
 # hence 1935).
 
-const SHILLER_COLUMNS = ["Date", "P", "D", "CPI", "Rate GS10", "CAPE", "TBILL"]
+const SHILLER_COLUMNS = ["Date", "P", "D", "E", "CPI", "Rate GS10", "CAPE", "TBILL"]
 
 """
     load_shiller_annual(path; sheet="Data2", bond_maturity=10) -> TimeArray
@@ -37,7 +37,7 @@ function load_shiller_annual(path::AbstractString; sheet::AbstractString = "Data
     col(name) = raw[2:end, findfirst(==(name), header)]
 
     dates = Date.(string.(col("Date")))
-    P, D, CPI, GS10, CAPE, TBILL = (Float64.(col(c)) for c in SHILLER_COLUMNS[2:end])
+    P, D, E, CPI, GS10, CAPE, TBILL = (Float64.(col(c)) for c in SHILLER_COLUMNS[2:end])
 
     # Full calendar years only: those with a December observation.
     dec = findall(d -> month(d) == 12, dates)
@@ -59,10 +59,15 @@ function load_shiller_annual(path::AbstractString; sheet::AbstractString = "Data
     dlcape = log.(cape ./ lag(CAPE[dec]))
     fr = re .- dlcape
     erp = xr .- mean(dlcape)
+    pe_all = P[dec] ./ E[dec]
+    pe = cur(pe_all)
+    dlpe = log.(pe ./ lag(pe_all))
 
     stamps = Date.(cur(years), 12, 31)
-    return TimeArray(stamps, hcat(π, rf, r, rb, tp, re, xr, rb_real, re_real, cape, dlcape, fr, erp),
-                     [:π, :rf, :r, :rb, :tp, :re, :xr, :rb_real, :re_real, :cape, :dlcape, :fr, :erp])
+    return TimeArray(stamps, hcat(π, rf, r, rb, tp, re, xr, rb_real, re_real, cape, dlcape, fr, erp,
+                                 pe, dlpe),
+                     [:π, :rf, :r, :rb, :tp, :re, :xr, :rb_real, :re_real, :cape, :dlcape, :fr, :erp,
+                      :pe, :dlpe])
 end
 
 """
