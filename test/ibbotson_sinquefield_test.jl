@@ -122,6 +122,8 @@ end
     @test d.ar1 ≈ [autocor(x, [1])[1], autocor(y, [1])[1]]
     @test d.neg ≈ [200 / 7, 0.0]
     @test d.p50 ≈ [median(x), median(y)]
+    @test d.p5 ≈ [quantile(x, 0.05), quantile(y, 0.05)]
+    @test d.p95 ≈ [quantile(x, 0.95), quantile(y, 0.95)]
     @test d.min == [minimum(x), minimum(y)] && d.max == [maximum(x), maximum(y)]
 
     c = correlation_table(ta)
@@ -376,4 +378,68 @@ end
 
     @test_throws ArgumentError block_bootstrap(X, 10, 2; block_size = 0)
     @test_throws ArgumentError block_bootstrap(X, 10, 2; block_size = n_obs + 1)
+end
+
+@testset "IbbotsonSinquefield mvn" begin
+    using Random: Xoshiro
+    path = joinpath(@__DIR__, "..", "analisys", "Ibbotson-Sinquefield-SimulationModel", "specs", "mvn",
+                    "cma_hist1935-2025.yaml")
+    p = load_mvn_params(path)
+    @test p.names == [:r, :rb_real, :re_real]
+    @test p.μ == [0.005, 0.015, 0.055]
+    @test p.Σ ≈ p.σ .* p.C .* p.σ'
+    @test p.start_year == 2026 && p.hist_period == (1935, 2025)
+
+    sc = simulate_mvn(p, 50, 4000; rng = Xoshiro(1))
+    @test sc isa Scenarios
+    @test size(sc.data) == (3, 50, 4000) && sc.names == p.names && sc.start_year == 2026
+    X = reshape(sc.data, 3, :)
+    @test vec(mean(X; dims = 2)) ≈ p.μ atol = 0.002
+    @test vec(std(X; dims = 2)) ≈ p.σ rtol = 0.01
+    @test cor(X') ≈ p.C atol = 0.01
+    @test simulate_mvn(p, 5, 2; rng = Xoshiro(2)).data == simulate_mvn(p, 5, 2; rng = Xoshiro(2)).data
+
+    bad = tempname() * ".yaml"
+    write(bad, replace(read(path, String), "[1.0, 0.643, 0.283]" => "[1.0, 0.643, 0.5]"))
+    @test_throws ArgumentError load_mvn_params(bad)   # not symmetric
+    @test_throws ArgumentError simulate_mvn(p.μ, p.Σ, 0, 1)
+end
+
+@testset "IbbotsonSinquefield simulate_ar1" begin
+    using Random: Xoshiro
+
+    ar = AR1(0.01, 0.6, 0.02, (0.0, 0.0), 0.0, Float64[], Float64[], Int[], (1, 2))
+    X = simulate_ar1(ar, 200, 2000; rng = Xoshiro(3))
+    @test size(X) == (200, 2000)
+    @test mean(X) ≈ unconditional_mean(ar) atol = 0.002
+    @test std(X) ≈ unconditional_std(ar) rtol = 0.02
+    @test cor(vec(X[1:end-1, :]), vec(X[2:end, :])) ≈ ar.φ atol = 0.01
+    # Path starts from y0: the first period is c + φ y0 + shock.
+    X0 = simulate_ar1(ar, 1, 20_000; y0 = 0.1, rng = Xoshiro(4))
+    @test mean(X0) ≈ ar.c + ar.φ * 0.1 atol = 0.001
+
+    path = joinpath(@__DIR__, "..", "analisys", "Ibbotson-Sinquefield-SimulationModel", "specs", "ar1",
+                    "hist1935-2025.yaml")
+    p = load_ar1_params(path)
+    @test p.names == [:r, :tp, :xr] && p.ar_period == (1935, 2025) && p.start_year == 2026
+    @test [m.φ for m in p.models][2:3] == [0.0, 0.0]
+    @test p.models[1].period == (1935, 2025)
+
+    roundtrip = tempname() * ".yaml"
+    models = [AR1(m.c, m.φ, m.σ, m.se, m.r2, zeros(90), zeros(90), Int[], m.period) for m in p.models]
+    save_ar1_params(roundtrip; models, names = p.names, C = p.C, y0 = p.y0, start_year = p.start_year)
+    q = load_ar1_params(roundtrip)
+    @test q.C == p.C && q.y0 == p.y0 && q.model_params == p.model_params
+
+    sc = simulate_ar1(p, 50, 4000; rng = Xoshiro(1))
+    @test sc isa Scenarios && size(sc.data) == (3, 50, 4000) && sc.names == p.names && sc.start_year == 2026
+    E = reshape(sc.data[2:3, :, :], 2, :)                  # i.i.d. components
+    @test vec(mean(E; dims = 2)) ≈ [m.c for m in p.models[2:3]] atol = 0.002
+    @test vec(std(E; dims = 2)) ≈ [m.σ for m in p.models[2:3]] rtol = 0.01
+    @test cor(E') ≈ p.C[2:3, 2:3] atol = 0.01
+    @test simulate_ar1(p, 5, 2; rng = Xoshiro(2)).data == simulate_ar1(p, 5, 2; rng = Xoshiro(2)).data
+
+    unstable = AR1(0.0, 1.0, 0.01, (0.0, 0.0), 0.0, Float64[], Float64[], Int[], (1, 2))
+    @test_throws ArgumentError simulate_ar1([unstable], [:x], 5, 2)
+    @test_throws DimensionMismatch simulate_ar1([ar, ar], [:a], 5, 2)
 end

@@ -1,0 +1,15 @@
+# AR(1) scenario model, decimal log units (export_ar1_params.jl, save_ar1_params).
+# r: real T-bill return, AR(1) fit; tp: excess bond return rb − rf; xr: excess equity
+# return re − rf; tp and xr are intercept only (phi = 0, c = sample mean).
+names: [r, tp, xr]
+ar_period: [1935, 2025]
+model_params:  # x_t = c + phi x_{t-1} + sigma e_t, e_t ~ N(0, correlation)
+  r: {n: 90, c: -0.00022561062213794774, se_c: 0.0030672001373875414, phi: 0.5510831425614849, se_phi: 0.08872260290222472, sigma: 0.029068573604743988, r2: 0.30478918426652535}
+  tp: {n: 90, c: 0.011118065016712309, se_c: 0.0067554591535923005, phi: 0.0, se_phi: 0.0, sigma: 0.06408791269675476, r2: 0.0}
+  xr: {n: 90, c: 0.06861010824327857, se_c: 0.01730997847492099, phi: 0.0, se_phi: 0.0, sigma: 0.16421687468771448, r2: 0.0}
+correlation:  # of the shocks e_t; rows and columns in the order of names
+  - [1.0, 0.20667140806327794, 0.1512352276885538]
+  - [0.20667140806327794, 1.0, 0.015924989809410168]
+  - [0.1512352276885538, 0.015924989809410168, 1.0]
+y0: {r: 0.015394765927019896, tp: 0.018834848269554456, xr: 0.10054378997269398}  # state in start_year − 1
+start_year: 2026  # first simulated year

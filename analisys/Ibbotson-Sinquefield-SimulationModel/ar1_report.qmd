@@ -1,0 +1,259 @@
+---
+title: "AR(1) scenarios of real returns"
+engine: julia
+format:
+  html:
+    embed-resources: true   # one self-contained file per render, figures included
+    toc: true
+    code-fold: true
+params:
+  # AR(1) specification written by export_ar1_params.jl, relative to this report
+  params_file: specs/ar1/hist1935-2025.yaml
+  T: 100
+  horizons: [1, 5, 10, 20, 30, 50, 100]
+  n_scen: 10000
+  seed: 1234
+---
+
+```{julia}
+#| tags: [parameters]
+#| output: false
+# Defaults for running the cells outside Quarto. Under `quarto render` the front-matter
+# `params` (overridden by `-P name:value` or `--execute-params file.yml`, see
+# render_ar1_reports.sh) are already defined as constants, so these assignments are skipped.
+@isdefined(params_file) || (params_file = "specs/ar1/hist1935-2025.yaml")
+@isdefined(T) || (T = 100)                      # simulated years
+@isdefined(horizons) || (horizons = [1, 5, 10, 20, 30, 50, 100])  # horizon table years, ≤ T
+@isdefined(n_scen) || (n_scen = 10000)
+@isdefined(seed) || (seed = 1234)
+```
+
+```{julia}
+#| output: false
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
+
+using MacroFinanceScenarios
+using MacroFinanceScenarios.IbbotsonSinquefield
+using MacroFinanceScenarios.EDA
+using MacroFinanceScenarios.ScenariosEvaluation
+using CSV, DataFrames, Dates, Random, Statistics, TimeSeries
+using Plots
+
+show_table(t; title = "", digits = 2) =
+    display(HTML(sprint(io -> print_table(io, t; backend = :html, digits, title))))
+
+# Everything loaded and computed is in decimal log units; the report shows percent. Means,
+# std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations
+# do not, and `neg` (share of negative values) is already in percent.
+pct(sc::Scenarios) = Scenarios(100 .* sc.data, sc.names, sc.start_year)
+function pct(df::DataFrame; cols)
+    out = copy(df)
+    for c in cols
+        out[!, c] = 100 .* out[!, c]
+    end
+    return out
+end
+moment_cols = [:mean, :std, :min, :p25, :p50, :p75, :max]   # describe_series columns in %
+span(p) = "$(p[1])–$(p[2])"
+
+p = load_ar1_params(joinpath(@__DIR__, params_file))
+comps = p.names                     # [:r, :tp, :xr]
+vars = [:r, :rb_real, :re_real]     # real returns built from them
+```
+
+## Model and parameters
+
+Three annual log variables, each an AR(1) `x_t = c + φ x_{t-1} + σ ε_t`, with shocks
+`ε_t` i.i.d. `N(0, C)` across years:
+
+- the real T-bill return `r`, with its AR(1) fit (intercept and lag coefficient);
+- the excess bond return `tp = rb − rf` and the excess equity return `xr = re − rf`,
+  intercept only (`φ = 0`): i.i.d. around their sample mean, as erp in the
+  Ibbotson–Sinquefield model.
+
+The real returns are `r`, `rb_real = r + tp` and `re_real = r + xr`. Parameters are read
+from `{julia} params_file`, estimated over `{julia} span(p.ar_period)` (the first year is
+lost to the lag).
+
+```{julia}
+mp = DataFrame(p.model_params)
+mp.uncond_mean = unconditional_mean.(p.models)
+mp.uncond_std = unconditional_std.(p.models)
+mp.y0 = p.y0
+show_table(pct(mp; cols = [:c, :se_c, :sigma, :uncond_mean, :uncond_std, :y0]); digits = 3,
+           title = "AR(1) parameters (c, σ, means, y0 in %)")
+show_table(insertcols!(DataFrame(p.C, String.(comps)), 1, :variable => String.(comps));
+           title = "Shock correlation C")
+show_table(DataFrame(parameter = ["params file", "first simulated year", "simulated years",
+                                  "scenarios", "seed"],
+                     value = [params_file, string(p.start_year), string(T), string(n_scen),
+                              string(seed)]);
+           title = "Simulation")
+```
+
+Units: returns and moments below are annual log values in percent, except where a table or
+chart says *simple rate* (`exp(·) − 1` of the log rate, in percent) or *wealth* (of 1
+invested); skewness, excess kurtosis, autocorrelations and correlations are unit-free.
+
+## Historical data and fitted values
+
+```{julia}
+raw = TimeArray(CSV.File(joinpath(@__DIR__, "..", "..", "data", "shiller_annual.csv"));
+                timestamp = :timestamp)
+data = subperiod(raw[union(comps, vars)...], p.ar_period)
+yrs = year.(timestamp(data))
+```
+
+The real short rate and its one-step-ahead fitted values `c + φ r_{t-1}` with the
+loaded parameters; the dashed line is the unconditional mean.
+
+```{julia}
+#| fig-cap: "Real T-bill return: actual and AR(1) fitted values"
+ar_r = p.models[findfirst(==(:r), comps)]
+r_hist = vec(values(data[:r]))
+r_fit = ar_r.c .+ ar_r.φ .* r_hist[1:end-1]
+plt = plot(yrs, 100r_hist; label = "actual", lw = 1.5, ylabel = "%", legend = :topright, size = (900, 330))
+plot!(plt, yrs[2:end], 100r_fit; label = "fitted", lw = 1.5)
+hline!(plt, [100unconditional_mean(ar_r)]; ls = :dash, color = :gray, label = "uncond. mean")
+plt
+```
+
+```{julia}
+#| fig-cap: "Excess returns and their intercepts"
+plot([begin
+          x = vec(values(data[v]))
+          m = p.models[findfirst(==(v), comps)]
+          plot(yrs, 100x; label = "actual", title = String(v), ylabel = "%", legend = :topleft)
+          hline!([100m.c]; ls = :dash, color = :gray, label = "c")
+      end for v in (:tp, :xr)]...; layout = (1, 2), size = (1000, 330))
+```
+
+```{julia}
+hist_moments = describe_series(data[vars...])
+hist_cor = correlation_table(data[vars...])
+hist_pct = pct(hist_moments; cols = moment_cols)
+show_table(hist_pct; title = "Historical real returns, $(span(p.ar_period))")
+show_table(pct(describe_series(data[comps...]); cols = moment_cols);
+           title = "Historical components, $(span(p.ar_period))")
+show_table(hist_cor; title = "Correlations, $(span(p.ar_period))")
+```
+
+## Simulation
+
+The simulation starts from `y0`, the state in `{julia} p.start_year - 1`; `r` reverts to
+its unconditional mean at rate `φ`, while `tp` and `xr` have no memory. No moment matching
+is applied: the gap between the achieved mean and the unconditional mean is sampling noise
+plus the effect of the starting point, `se` is the std of the per-path means / √n_scen.
+
+```{julia}
+sc_comp = simulate_ar1(p, T, n_scen; rng = MersenneTwister(seed))
+comp(v) = sc_comp[v]                                         # T × n_scen
+rets = cat(comp(:r), comp(:r) .+ comp(:tp), comp(:r) .+ comp(:xr); dims = 3)
+sc = Scenarios(permutedims(rets, (3, 1, 2)), vars, sc_comp.start_year)
+
+μ_c = Dict(zip(comps, unconditional_mean.(p.models)))
+μ_target = Dict(:r => μ_c[:r], :rb_real => μ_c[:r] + μ_c[:tp], :re_real => μ_c[:r] + μ_c[:xr])
+
+path_means = dropdims(mean(sc.data; dims = 2); dims = 2)   # n_vars × n_scen
+achieved = DataFrame(variable = String.(vars),
+                     uncond_mean = 100 .* [μ_target[v] for v in vars],
+                     simulated = 100vec(mean(path_means; dims = 2)),
+                     se = 100vec(std(path_means; dims = 2)) ./ sqrt(n_scen))
+achieved.z = (achieved.simulated .- achieved.uncond_mean) ./ achieved.se
+show_table(achieved; title = "Mean over all years and paths vs. unconditional mean (%)")
+println("Simulated years $(first(scenario_years(sc)))–$(last(scenario_years(sc))).")
+```
+
+## Fan charts
+
+5–95 and 25–75 percentile bands, median, and the unconditional mean (dashed).
+
+```{julia}
+fans(vars; kwargs...) = [fan(sc, v; μ = μ_target[v], kwargs...) for v in vars]
+```
+
+### Annual returns
+
+```{julia}
+#| fig-cap: "Annual log real returns"
+plot(fans(vars; scale = 100)...; layout = (1, length(vars)), size = (1000, 330), ylabel = "%")
+```
+
+### Cumulative wealth
+
+```{julia}
+#| fig-cap: "Wealth of 1 invested, real"
+plot(fans(vars; kind = :wealth)...; layout = (1, length(vars)), size = (1000, 330), ylabel = "wealth")
+```
+
+### Annualised returns
+
+Geometric-average annual return over the first `h` years, `exp(sum(x_1..h)/h) − 1`.
+
+```{julia}
+#| fig-cap: "Annualised simple real rates"
+plot(fans(vars; kind = :annualised, simple = true, scale = 100)...;
+     layout = (1, length(vars)), size = (1000, 330), ylabel = "%")
+```
+
+## Evaluation
+
+### Per-path moments
+
+Statistics computed within each simulated path, then summarised across scenarios; the
+`historical` column is the historical sample. `neg` is the percent of years with a
+negative value.
+
+```{julia}
+for (name, t) in path_moments(pct(sc); hist = hist_pct)
+    show_table(t; title = String(name))
+end
+```
+
+### Correlations
+
+Correlations computed within each simulated path, then summarised across scenarios. The
+matrix is the mean across paths. In the pair table, `historical` is the correlation in the
+sample and `hist_rank` the share of paths with a correlation at or below it. Each path
+covers `{julia} T` years, so the bands show what a `{julia} T`-year window looks like.
+
+```{julia}
+show_table(mean_path_correlations(sc); title = "Mean within-path correlations")
+show_table(path_correlations(sc; hist = hist_cor); title = "Pairs")
+```
+
+### Horizon percentiles
+
+Annualised returns: the geometric-average annual return over `h` years,
+`exp(sum(x_1..h)/h) − 1`, in percent.
+
+```{julia}
+function horizon_tables(vars; kind, label)
+    for v in vars
+        t = select(horizon_percentiles(sc; vars = [v], horizons = filter(<=(T), horizons), kind,
+                                       simple = true), Not(:variable))
+        t = pct(t; cols = names(t, Not([:horizon, :year])))
+        show_table(t; title = "$v, $label")
+    end
+end
+horizon_tables(vars; kind = :annualised, label = "annualised (simple rate, %)")
+```
+
+### Drawdowns
+
+Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years),
+per path over the first `horizon` simulated years (50 by default, at most `T`).
+
+```{julia}
+function dd_table(s; horizon = 50)
+    horizon <= size(s.data, 2) || throw(ArgumentError("horizon $horizon exceeds the $(size(s.data, 2)) simulated years"))
+    t = drawdown_table(Scenarios(s.data[:, 1:horizon, :], s.names, s.start_year))
+    rows = t.statistic .== "max_drawdown"
+    num = names(t, Not([:variable, :statistic]))
+    t[rows, num] .*= 100
+    return t
+end
+dd_h = min(50, T)
+show_table(dd_table(sc; horizon = dd_h); title = "Real, first $dd_h years")
+```

@@ -94,3 +94,77 @@ function load_residuals(path::AbstractString)
     M = stack(Vector{Float64}(getproperty(f, n)) for n in names)
     return Vector{Int}(f.year), M, collect(names)
 end
+
+"""
+    save_ar1_params(path; models, names, C, y0, start_year, header="")
+
+Write a set of AR(1) equations simulated with correlated normal shocks (`simulate_ar1`) to
+the YAML file `path`, in decimals: `names`, the estimation window `ar_period` (read from the
+fits, which must share it), `model_params` (one AR(1) per variable, fields
+`n, c, se_c, phi, se_phi, sigma, r2`), the shock `correlation` `C`, the state `y0` before the
+first simulated period and `start_year`. `header` lines are written as leading comments.
+"""
+function save_ar1_params(path::AbstractString; models::AbstractVector{AR1}, names::AbstractVector{Symbol},
+                         C::AbstractMatrix{<:Real}, y0::AbstractVector{<:Real}, start_year::Integer,
+                         header::AbstractString = "")
+    n = length(models)
+    length(names) == n == length(y0) && size(C) == (n, n) ||
+        throw(DimensionMismatch("models, names, y0 and C must describe the same $n variables"))
+    allequal(m.period for m in models) ||
+        throw(ArgumentError("the AR(1) fits have different periods: $([m.period for m in models])"))
+    yaml_map(ks, vs) = "{" * join(("$k: $(yaml_value(v))" for (k, v) in zip(ks, vs)), ", ") * "}"
+
+    open(path, "w") do io
+        for line in split(header, '\n'; keepempty = false)
+            println(io, "# ", line)
+        end
+        println(io, "names: [", join(names, ", "), "]")
+        println(io, "ar_period: ", yaml_list(models[1].period))
+        println(io, "model_params:  # x_t = c + phi x_{t-1} + sigma e_t, e_t ~ N(0, correlation)")
+        for (name, m) in zip(names, models)
+            println(io, "  ", name, ": ", yaml_map(AR1_FIELDS, (length(m.resid), m.c, m.se[1], m.φ, m.se[2], m.σ, m.r2)))
+        end
+        println(io, "correlation:  # of the shocks e_t; rows and columns in the order of names")
+        for i in 1:n
+            println(io, "  - ", yaml_list(C[i, :]))
+        end
+        println(io, "y0: ", yaml_map(names, y0), "  # state in start_year − 1")
+        println(io, "start_year: ", yaml_value(start_year), "  # first simulated year")
+    end
+    return path
+end
+
+"""
+    load_ar1_params(path) -> NamedTuple
+
+Read a specification written by `save_ar1_params`. Fields: `names`, `models` (one `AR1` per
+variable, without residuals or fitted values), `C` (shock correlation), `y0`, `start_year`,
+`ar_period` and `model_params`, a vector of NamedTuples
+`(variable, n, c, se_c, phi, se_phi, sigma, r2)` (a Tables.jl table).
+"""
+function load_ar1_params(path::AbstractString)
+    d = YAML.load_file(path)
+    names = Symbol.(d["names"])
+    n = length(names)
+    ar_period = (Int(d["ar_period"][1]), Int(d["ar_period"][2]))
+    model_params = [(; variable = String(v), (k => d["model_params"][String(v)][String(k)] for k in AR1_FIELDS)...)
+                    for v in names]
+    models = [AR1(m.c, m.phi, m.sigma, (m.se_c, m.se_phi), m.r2, Float64[], Float64[], Int[], ar_period)
+              for m in model_params]
+    rows = d["correlation"]
+    length(rows) == n && all(length(r) == n for r in rows) ||
+        throw(DimensionMismatch("correlation must be $n × $n (the length of names)"))
+    C = Float64[rows[i][j] for i in 1:n, j in 1:n]
+    C == C' && all(==(1), diag(C)) && isposdef(C) ||
+        throw(ArgumentError("correlation must be a symmetric positive-definite matrix with a unit diagonal"))
+    y0 = [Float64(d["y0"][String(v)]) for v in names]
+    return (; names, models, C, y0, start_year = Int(d["start_year"]), ar_period, model_params)
+end
+
+"""
+    simulate_ar1(p::NamedTuple, T, n_scen; y0=p.y0, rng) -> Scenarios
+
+Simulate from a specification read by `load_ar1_params`, starting in `p.start_year`.
+"""
+simulate_ar1(p::NamedTuple, T::Integer, n_scen::Integer; y0 = p.y0, kwargs...) =
+    simulate_ar1(p.models, p.names, T, n_scen; C = p.C, y0, start_year = p.start_year, kwargs...)

@@ -1,0 +1,218 @@
+---
+title: "Multivariate normal scenarios of real returns"
+engine: julia
+format:
+  html:
+    embed-resources: true   # one self-contained file per render, figures included
+    toc: true
+    code-fold: true
+params:
+  # Distribution parameters (means, std, correlation), relative to this report
+  params_file: specs/mvn/cma_hist1935-2025.yaml
+  T: 100
+  horizons: [1, 5, 10, 20, 30, 50]
+  n_scen: 10000
+  seed: 1234
+---
+
+```{julia}
+#| tags: [parameters]
+#| output: false
+# Defaults for running the cells outside Quarto. Under `quarto render` the front-matter
+# `params` (overridden by `-P name:value` or `--execute-params file.yml`, see
+# render_mvn_reports.sh) are already defined as constants, so these assignments are skipped.
+@isdefined(params_file) || (params_file = "specs/mvn/cma_hist1935-2025.yaml")
+@isdefined(T) || (T = 100)                      # simulated years
+@isdefined(horizons) || (horizons = [1, 5, 10, 20, 30, 50, 100])  # horizon table years, ≤ T
+@isdefined(n_scen) || (n_scen = 10000)
+@isdefined(seed) || (seed = 1234)
+```
+
+```{julia}
+#| output: false
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
+
+using MacroFinanceScenarios
+using MacroFinanceScenarios.IbbotsonSinquefield
+using MacroFinanceScenarios.EDA
+using MacroFinanceScenarios.ScenariosEvaluation
+using CSV, DataFrames, Random, Statistics, TimeSeries
+using Plots
+
+show_table(t; title = "", digits = 2) =
+    display(HTML(sprint(io -> print_table(io, t; backend = :html, digits, title))))
+
+# Everything loaded and computed is in decimal log units; the report shows percent. Means,
+# std and percentiles scale by 100; skewness, kurtosis, autocorrelations and correlations
+# do not, and `neg` (share of negative values) is already in percent.
+pct(sc::Scenarios) = Scenarios(100 .* sc.data, sc.names, sc.start_year)
+function pct(df::DataFrame; cols)
+    out = copy(df)
+    for c in cols
+        out[!, c] = 100 .* out[!, c]
+    end
+    return out
+end
+moment_cols = [:mean, :std, :min, :p25, :p50, :p75, :max]   # describe_series columns in %
+span(p) = "$(p[1])–$(p[2])"
+
+p = load_mvn_params(joinpath(@__DIR__, params_file))
+vars = p.names
+```
+
+## Distribution and assumptions
+
+Each simulated year is an independent draw of the annual log real returns — the real
+T-bill return `r`, the real bond return `rb_real` and the real equity return `re_real` —
+from a multivariate normal distribution `N(μ, Σ)`, with `Σ = diag(σ) · C · diag(σ)`. The
+parameters are read from `{julia} params_file`. The means are means of annual **log**
+returns: a simple expected return `E[R]` corresponds to roughly `log(1 + E[R]) − σ²/2`.
+
+```{julia}
+show_table(DataFrame(variable = String.(vars), mean = 100p.μ, std = 100p.σ,
+                     simple_mean = 100(exp.(p.μ .+ p.σ .^ 2 ./ 2) .- 1));
+           title = "Annual log real returns (%); simple_mean = E[exp(x)] − 1")
+show_table(DataFrame(p.C, String.(vars)) |> t -> insertcols!(t, 1, :variable => String.(vars));
+           title = "Correlation")
+show_table(DataFrame(parameter = ["params file", "first simulated year", "simulated years",
+                                  "scenarios", "seed"],
+                     value = [params_file, string(p.start_year), string(T), string(n_scen),
+                              string(seed)]);
+           title = "Parameters")
+```
+
+Units: returns and moments below are annual log values in percent, except where a table or
+chart says *simple rate* (`exp(·) − 1` of the log rate, in percent) or *wealth* (of 1
+invested); skewness, excess kurtosis, autocorrelations and correlations are unit-free.
+
+## Historical moments
+
+```{julia}
+#| output: asis
+has_hist = p.hist_period !== nothing
+has_hist || println("The params file has no `hist_period`; historical comparisons are skipped.")
+```
+
+```{julia}
+if has_hist
+    raw = TimeArray(CSV.File(joinpath(@__DIR__, "..", "..", "data", "shiller_annual.csv"));
+                    timestamp = :timestamp)
+    data = subperiod(raw[vars...], p.hist_period)
+    hist_moments = describe_series(data)
+    hist_cor = correlation_table(data)
+    hist_pct = pct(hist_moments; cols = moment_cols)
+    show_table(hist_pct; title = "Historical sample, $(span(p.hist_period)) (not mean-adjusted)")
+    show_table(hist_cor; title = "Correlations, $(span(p.hist_period))")
+else
+    hist_pct = hist_cor = nothing
+end
+```
+
+Under the normal i.i.d. model skewness, excess kurtosis and autocorrelations are 0; the
+historical values show what the model leaves out.
+
+## Simulation
+
+No moment matching is applied after the simulation: the gap between the achieved mean
+and the distribution mean is sampling noise, summarised by its standard error (std of the
+per-path means / √n_scen).
+
+```{julia}
+sc = simulate_mvn(p, T, n_scen; rng = MersenneTwister(seed))
+path_means = dropdims(mean(sc.data; dims = 2); dims = 2)   # n_vars × n_scen
+achieved = DataFrame(variable = String.(sc.names),
+                     target = 100p.μ,
+                     simulated = 100vec(mean(path_means; dims = 2)),
+                     se = 100vec(std(path_means; dims = 2)) ./ sqrt(n_scen))
+achieved.z = (achieved.simulated .- achieved.target) ./ achieved.se
+show_table(achieved; title = "Mean over all years and paths vs. target (%)")
+println("Simulated years $(first(scenario_years(sc)))–$(last(scenario_years(sc))).")
+```
+
+## Fan charts
+
+5–95 and 25–75 percentile bands, median, and the distribution mean (dashed).
+
+```{julia}
+μ_target = Dict(zip(vars, p.μ))
+fans(vars; kwargs...) = [fan(sc, v; μ = μ_target[v], μ_label = "mean", kwargs...) for v in vars]
+```
+
+### Cumulative wealth
+
+```{julia}
+#| fig-cap: "Wealth of 1 invested, real"
+plot(fans(vars; kind = :wealth)...; layout = (1, length(vars)), size = (1000, 330), ylabel = "wealth")
+```
+
+### Annualised returns
+
+Geometric-average annual return over the first `h` years, `exp(sum(x_1..h)/h) − 1`.
+
+```{julia}
+#| fig-cap: "Annualised simple real rates"
+plot(fans(vars; kind = :annualised, simple = true, scale = 100)...;
+     layout = (1, length(vars)), size = (1000, 330), ylabel = "%")
+```
+
+## Evaluation
+
+### Per-path moments
+
+Statistics computed within each simulated path, then summarised across scenarios; the
+`historical` column is the historical sample (if `hist_period` is set). `neg` is the
+percent of years with a negative value.
+
+```{julia}
+for (name, t) in path_moments(pct(sc); hist = hist_pct)
+    show_table(t; title = String(name))
+end
+```
+
+### Correlations
+
+Correlations computed within each simulated path, then summarised across scenarios. The
+matrix is the mean across paths. In the pair table, `historical` is the correlation in the
+sample and `hist_rank` the share of paths with a correlation at or below it. Each path
+covers `{julia} T` years, so the bands show what a `{julia} T`-year window looks like.
+
+```{julia}
+show_table(mean_path_correlations(sc); title = "Mean within-path correlations")
+show_table(path_correlations(sc; hist = hist_cor); title = "Pairs")
+```
+
+### Horizon percentiles
+
+Annualised returns: the geometric-average annual return over `h` years,
+`exp(sum(x_1..h)/h) − 1`, in percent.
+
+```{julia}
+function horizon_tables(vars; kind, label)
+    for v in vars
+        t = select(horizon_percentiles(sc; vars = [v], horizons = filter(<=(T), horizons), kind,
+                                       simple = true), Not(:variable))
+        t = pct(t; cols = names(t, Not([:horizon, :year])))
+        show_table(t; title = "$v, $label")
+    end
+end
+horizon_tables(vars; kind = :annualised, label = "annualised (simple rate, %)")
+```
+
+### Drawdowns
+
+Maximum drawdown of wealth (in %) and the longest spell below a previous peak (in years),
+per path over the first `horizon` simulated years (50 by default, at most `T`).
+
+```{julia}
+function dd_table(s; horizon = 50)
+    horizon <= size(s.data, 2) || throw(ArgumentError("horizon $horizon exceeds the $(size(s.data, 2)) simulated years"))
+    t = drawdown_table(Scenarios(s.data[:, 1:horizon, :], s.names, s.start_year))
+    rows = t.statistic .== "max_drawdown"
+    num = names(t, Not([:variable, :statistic]))
+    t[rows, num] .*= 100
+    return t
+end
+dd_h = min(50, T)
+show_table(dd_table(sc; horizon = dd_h); title = "Real, first $dd_h years")
+```

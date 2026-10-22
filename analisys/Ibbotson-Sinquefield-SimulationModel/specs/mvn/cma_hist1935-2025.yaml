@@ -1,0 +1,11 @@
+# Multivariate normal i.i.d. annual log real returns, decimal log units (load_mvn_params).
+# Means: capital market assumptions; std and correlation: sample 1935–2025 of shiller_annual.csv.
+names: [r, rb_real, re_real]
+mean: {r: 0.005, rb_real: 0.015, re_real: 0.055}
+std: {r: 0.0346, rb_real: 0.0803, re_real: 0.1729}
+correlation:  # rows and columns in the order of names
+  - [1.0, 0.643, 0.283]
+  - [0.643, 1.0, 0.183]
+  - [0.283, 0.183, 1.0]
+start_year: 2026  # first simulated year
+hist_period: [1935, 2025]  # historical sample shown for comparison
