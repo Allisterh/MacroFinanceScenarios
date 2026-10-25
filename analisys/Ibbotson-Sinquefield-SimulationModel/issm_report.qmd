@@ -208,7 +208,9 @@ over `h` years, `exp(sum(x_1..h)/h) − 1`, in percent.
 function horizon_tables(vars; kind, label)
     for v in vars
         t = select(horizon_percentiles(full; vars = [v], horizons = filter(<=(T), horizons), kind,
+                                       probs = [0.0, 0.05, 0.25, 0.5, 0.75, 0.95, 1.0],
                                        simple = true), Not(:variable))
+        t = DataFrames.rename(t, :p0 => :min, :p100 => :max)
         t = pct(t; cols = names(t, Not([:horizon, :year])))
         show_table(t; title = "$v, $label")
     end

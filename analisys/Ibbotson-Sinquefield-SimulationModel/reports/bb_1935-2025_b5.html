@@ -2447,7 +2447,7 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="12" style="text-align: center; font-size: x-large; font-weight: bold;">Matched sample, 1935–2025</td>
+<td colspan="14" style="text-align: center; font-size: x-large; font-weight: bold;">Matched sample, 1935–2025</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">variable</th>
@@ -2458,13 +2458,17 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">ar1</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">neg</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">min</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p5</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p25</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p50</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p75</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p95</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">max</th>
 </tr>
 <tr class="columnLabelRow header">
 <th style="text-align: right;" data-quarto-table-cell-role="th">String</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
@@ -2488,9 +2492,11 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.55</td>
 <td style="text-align: right;">37.36</td>
 <td style="text-align: right;">-15.65</td>
+<td style="text-align: right;">-0.06</td>
 <td style="text-align: right;">-1.13</td>
 <td style="text-align: right;">1.09</td>
 <td style="text-align: right;">2.38</td>
+<td style="text-align: right;">0.05</td>
 <td style="text-align: right;">7.18</td>
 </tr>
 <tr class="dataRow even">
@@ -2502,9 +2508,11 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">0.1</td>
 <td style="text-align: right;">39.56</td>
 <td style="text-align: right;">-21.92</td>
+<td style="text-align: right;">-0.1</td>
 <td style="text-align: right;">-3.19</td>
 <td style="text-align: right;">1.46</td>
 <td style="text-align: right;">5.75</td>
+<td style="text-align: right;">0.14</td>
 <td style="text-align: right;">24.44</td>
 </tr>
 <tr class="dataRow odd">
@@ -2516,9 +2524,11 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">-0.02</td>
 <td style="text-align: right;">31.87</td>
 <td style="text-align: right;">-50.67</td>
+<td style="text-align: right;">-0.27</td>
 <td style="text-align: right;">-3.6</td>
 <td style="text-align: right;">9.89</td>
 <td style="text-align: right;">16.44</td>
+<td style="text-align: right;">0.28</td>
 <td style="text-align: right;">37.56</td>
 </tr>
 </tbody>
@@ -3095,32 +3105,38 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">horizon_tables</span>(vars; kind, label)</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="kw">in</span> vars</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> <span class="fu">select</span>(<span class="fu">horizon_percentiles</span>(sc; vars <span class="op">=</span> [v], horizons <span class="op">=</span> <span class="fu">filter</span>(<span class="op">&lt;=</span>(T), horizons), kind,</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>                                       simple <span class="op">=</span> <span class="cn">true</span>), <span class="fu">Not</span>(<span class="op">:</span>variable))</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> <span class="fu">pct</span>(t; cols <span class="op">=</span> <span class="fu">names</span>(t, <span class="fu">Not</span>([<span class="op">:</span>horizon, <span class="op">:</span>year])))</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">show_table</span>(t; title <span class="op">=</span> <span class="st">&quot;</span><span class="sc">$</span>v<span class="st">, </span><span class="sc">$</span>label<span class="st">&quot;</span>)</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="fu">horizon_tables</span>(vars; kind <span class="op">=</span> <span class="op">:</span>annualised, label <span class="op">=</span> <span class="st">&quot;annualised (simple rate, %)&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>                                       probs <span class="op">=</span> [<span class="fl">0.0</span>, <span class="fl">0.05</span>, <span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="fl">0.75</span>, <span class="fl">0.95</span>, <span class="fl">1.0</span>],</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>                                       simple <span class="op">=</span> <span class="cn">true</span>), <span class="fu">Not</span>(<span class="op">:</span>variable))</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> DataFrames.<span class="fu">rename</span>(t, <span class="op">:</span>p0 <span class="op">=&gt;</span> <span class="op">:</span>min, <span class="op">:</span>p100 <span class="op">=&gt;</span> <span class="op">:</span>max)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> <span class="fu">pct</span>(t; cols <span class="op">=</span> <span class="fu">names</span>(t, <span class="fu">Not</span>([<span class="op">:</span>horizon, <span class="op">:</span>year])))</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">show_table</span>(t; title <span class="op">=</span> <span class="st">&quot;</span><span class="sc">$</span>v<span class="st">, </span><span class="sc">$</span>label<span class="st">&quot;</span>)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="fu">horizon_tables</span>(vars; kind <span class="op">=</span> <span class="op">:</span>annualised, label <span class="op">=</span> <span class="st">&quot;annualised (simple rate, %)&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">r, annualised (simple rate, %)</td>
+<td colspan="10" style="text-align: center; font-size: x-large; font-weight: bold;">r, annualised (simple rate, %)</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">horizon</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">year</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">mean</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">min</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p5</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p25</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p50</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p75</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p95</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">max</th>
 </tr>
 <tr class="columnLabelRow header">
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
@@ -3134,61 +3150,73 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">1.0</td>
 <td style="text-align: right;">2026.0</td>
 <td style="text-align: right;">0.55</td>
+<td style="text-align: right;">-14.48</td>
 <td style="text-align: right;">-5.89</td>
 <td style="text-align: right;">-1.18</td>
 <td style="text-align: right;">1.02</td>
 <td style="text-align: right;">2.41</td>
 <td style="text-align: right;">4.82</td>
+<td style="text-align: right;">7.44</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">5.0</td>
 <td style="text-align: right;">2030.0</td>
 <td style="text-align: right;">0.53</td>
+<td style="text-align: right;">-7.91</td>
 <td style="text-align: right;">-3.86</td>
 <td style="text-align: right;">-0.71</td>
 <td style="text-align: right;">0.7</td>
 <td style="text-align: right;">2.08</td>
 <td style="text-align: right;">3.77</td>
+<td style="text-align: right;">6.59</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">10.0</td>
 <td style="text-align: right;">2035.0</td>
 <td style="text-align: right;">0.52</td>
+<td style="text-align: right;">-5.91</td>
 <td style="text-align: right;">-2.7</td>
 <td style="text-align: right;">-0.52</td>
 <td style="text-align: right;">0.64</td>
 <td style="text-align: right;">1.75</td>
 <td style="text-align: right;">3.07</td>
+<td style="text-align: right;">5.81</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">20.0</td>
 <td style="text-align: right;">2045.0</td>
 <td style="text-align: right;">0.51</td>
+<td style="text-align: right;">-4.46</td>
 <td style="text-align: right;">-1.76</td>
 <td style="text-align: right;">-0.32</td>
 <td style="text-align: right;">0.59</td>
 <td style="text-align: right;">1.44</td>
 <td style="text-align: right;">2.47</td>
+<td style="text-align: right;">4.66</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">30.0</td>
 <td style="text-align: right;">2055.0</td>
 <td style="text-align: right;">0.5</td>
+<td style="text-align: right;">-4.13</td>
 <td style="text-align: right;">-1.35</td>
 <td style="text-align: right;">-0.18</td>
 <td style="text-align: right;">0.55</td>
 <td style="text-align: right;">1.26</td>
 <td style="text-align: right;">2.16</td>
+<td style="text-align: right;">3.95</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">50.0</td>
 <td style="text-align: right;">2075.0</td>
 <td style="text-align: right;">0.51</td>
+<td style="text-align: right;">-2.67</td>
 <td style="text-align: right;">-0.93</td>
 <td style="text-align: right;">-0.04</td>
 <td style="text-align: right;">0.55</td>
 <td style="text-align: right;">1.08</td>
 <td style="text-align: right;">1.84</td>
+<td style="text-align: right;">3.14</td>
 </tr>
 </tbody>
 </table>
@@ -3197,21 +3225,25 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">rb_real, annualised (simple rate, %)</td>
+<td colspan="10" style="text-align: center; font-size: x-large; font-weight: bold;">rb_real, annualised (simple rate, %)</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">horizon</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">year</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">mean</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">min</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p5</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p25</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p50</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p75</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p95</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">max</th>
 </tr>
 <tr class="columnLabelRow header">
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
@@ -3225,61 +3257,73 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">1.0</td>
 <td style="text-align: right;">2026.0</td>
 <td style="text-align: right;">1.89</td>
+<td style="text-align: right;">-19.68</td>
 <td style="text-align: right;">-10.06</td>
 <td style="text-align: right;">-3.36</td>
 <td style="text-align: right;">1.47</td>
 <td style="text-align: right;">6.62</td>
 <td style="text-align: right;">18.09</td>
+<td style="text-align: right;">27.69</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">5.0</td>
 <td style="text-align: right;">2030.0</td>
 <td style="text-align: right;">1.56</td>
+<td style="text-align: right;">-10.94</td>
 <td style="text-align: right;">-4.66</td>
 <td style="text-align: right;">-1.03</td>
 <td style="text-align: right;">1.43</td>
 <td style="text-align: right;">3.92</td>
 <td style="text-align: right;">8.48</td>
+<td style="text-align: right;">18.22</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">10.0</td>
 <td style="text-align: right;">2035.0</td>
 <td style="text-align: right;">1.53</td>
+<td style="text-align: right;">-7.86</td>
 <td style="text-align: right;">-2.86</td>
 <td style="text-align: right;">-0.52</td>
 <td style="text-align: right;">1.38</td>
 <td style="text-align: right;">3.4</td>
 <td style="text-align: right;">6.61</td>
+<td style="text-align: right;">12.73</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">20.0</td>
 <td style="text-align: right;">2045.0</td>
 <td style="text-align: right;">1.52</td>
+<td style="text-align: right;">-5.05</td>
 <td style="text-align: right;">-1.67</td>
 <td style="text-align: right;">0.05</td>
 <td style="text-align: right;">1.38</td>
 <td style="text-align: right;">2.9</td>
 <td style="text-align: right;">5.15</td>
+<td style="text-align: right;">10.09</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">30.0</td>
 <td style="text-align: right;">2055.0</td>
 <td style="text-align: right;">1.51</td>
+<td style="text-align: right;">-4.02</td>
 <td style="text-align: right;">-1.14</td>
 <td style="text-align: right;">0.29</td>
 <td style="text-align: right;">1.43</td>
 <td style="text-align: right;">2.65</td>
 <td style="text-align: right;">4.48</td>
+<td style="text-align: right;">8.72</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">50.0</td>
 <td style="text-align: right;">2075.0</td>
 <td style="text-align: right;">1.52</td>
+<td style="text-align: right;">-2.89</td>
 <td style="text-align: right;">-0.59</td>
 <td style="text-align: right;">0.59</td>
 <td style="text-align: right;">1.47</td>
 <td style="text-align: right;">2.4</td>
 <td style="text-align: right;">3.76</td>
+<td style="text-align: right;">7.02</td>
 </tr>
 </tbody>
 </table>
@@ -3288,21 +3332,25 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <table class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="title header">
-<td colspan="8" style="text-align: center; font-size: x-large; font-weight: bold;">re_real, annualised (simple rate, %)</td>
+<td colspan="10" style="text-align: center; font-size: x-large; font-weight: bold;">re_real, annualised (simple rate, %)</td>
 </tr>
 <tr class="columnLabelRow even">
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">horizon</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">year</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">mean</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">min</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p5</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p25</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p50</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p75</th>
 <th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">p95</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">max</th>
 </tr>
 <tr class="columnLabelRow header">
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Int64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
+<th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
 <th style="text-align: right;" data-quarto-table-cell-role="th">Float64</th>
@@ -3316,61 +3364,73 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <td style="text-align: right;">1.0</td>
 <td style="text-align: right;">2026.0</td>
 <td style="text-align: right;">6.99</td>
+<td style="text-align: right;">-39.75</td>
 <td style="text-align: right;">-23.94</td>
 <td style="text-align: right;">-3.68</td>
 <td style="text-align: right;">10.4</td>
 <td style="text-align: right;">17.91</td>
 <td style="text-align: right;">32.18</td>
+<td style="text-align: right;">45.59</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">5.0</td>
 <td style="text-align: right;">2030.0</td>
 <td style="text-align: right;">5.9</td>
+<td style="text-align: right;">-20.02</td>
 <td style="text-align: right;">-6.19</td>
 <td style="text-align: right;">0.44</td>
 <td style="text-align: right;">6.65</td>
 <td style="text-align: right;">10.87</td>
 <td style="text-align: right;">18.12</td>
+<td style="text-align: right;">29.68</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">10.0</td>
 <td style="text-align: right;">2035.0</td>
 <td style="text-align: right;">5.71</td>
+<td style="text-align: right;">-14.11</td>
 <td style="text-align: right;">-3.34</td>
 <td style="text-align: right;">2.11</td>
 <td style="text-align: right;">5.83</td>
 <td style="text-align: right;">9.52</td>
 <td style="text-align: right;">13.99</td>
+<td style="text-align: right;">24.83</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">20.0</td>
 <td style="text-align: right;">2045.0</td>
 <td style="text-align: right;">5.72</td>
+<td style="text-align: right;">-7.9</td>
 <td style="text-align: right;">-0.54</td>
 <td style="text-align: right;">3.18</td>
 <td style="text-align: right;">5.82</td>
 <td style="text-align: right;">8.36</td>
 <td style="text-align: right;">11.62</td>
+<td style="text-align: right;">17.17</td>
 </tr>
 <tr class="dataRow odd">
 <td style="text-align: right;">30.0</td>
 <td style="text-align: right;">2055.0</td>
 <td style="text-align: right;">5.71</td>
+<td style="text-align: right;">-5.22</td>
 <td style="text-align: right;">0.69</td>
 <td style="text-align: right;">3.71</td>
 <td style="text-align: right;">5.79</td>
 <td style="text-align: right;">7.81</td>
 <td style="text-align: right;">10.49</td>
+<td style="text-align: right;">15.45</td>
 </tr>
 <tr class="dataRow even">
 <td style="text-align: right;">50.0</td>
 <td style="text-align: right;">2075.0</td>
 <td style="text-align: right;">5.69</td>
+<td style="text-align: right;">-2.68</td>
 <td style="text-align: right;">1.86</td>
 <td style="text-align: right;">4.16</td>
 <td style="text-align: right;">5.72</td>
 <td style="text-align: right;">7.26</td>
 <td style="text-align: right;">9.47</td>
+<td style="text-align: right;">13.36</td>
 </tr>
 </tbody>
 </table>
