@@ -54,15 +54,15 @@ The specification follows in four steps from an accounting identity plus one ass
 
 **Step 1 — Return identity.** The gross return is R = (P' + D')/P. Log-linearising around the mean log price–dividend ratio (Campbell and Shiller 1988):
 
-```latex
-r_{t+1} \approx k + dp_t - \rho\, dp_{t+1} + \Delta d_{t+1},\qquad \rho = \frac{1}{1+\overline{D/P}} \approx 0.96\text{--}0.97 \text{ (annual)}
+```math
+\r_{t+1} \approx k + dp_t - \rho\, dp_{t+1} + \Delta d_{t+1},\qquad \rho = \frac{1}{1+\overline{D/P}} \approx 0.96\text{--}0.97 \text{ (annual)}
 ```
 
 So the return is dividend growth + yield + a revaluation term. This is why equities split naturally into a growth block and a yield block.
 
 **Step 2 — Present value.** Solving forward and ruling out bubbles (ρ^j dp\_{t+j} → 0):
 
-```latex
+```math
 dp_t = -\frac{k}{1-\rho} + \sum_{j\ge 0} \rho^{j}\, E_t\big[r_{t+1+j} - \Delta d_{t+1+j}\big]
 ```
 
@@ -70,7 +70,7 @@ The yield is high when expected returns are high or expected growth is low; noth
 
 **Step 3 — Split expected return and growth into trend and cycle.** Write the expected return as short rate + equity premium, E r = i + erp, and each component as trend + cycle. A random walk forecasts itself, E\_t τ\_{t+j} = τ\_t for every horizon, so the trend part of the infinite sum is a geometric series:
 
-```latex
+```math
 dp_t = a + \frac{1}{1-\rho}\Big(\tau^{i}_t + \tau^{erp}_t - \tau^{g}_t\Big) + c^{dp}_t,\qquad c^{dp}_t = \sum_{j\ge0}\rho^j E_t\big[c^{i} + c^{erp} - c^{g}\big]_{t+j}
 ```
 
@@ -78,7 +78,7 @@ This is your specification for the log yield, with loading 1/(1−ρ) ≈ 25–3
 
 **Step 4 — An exact linear form: observe log(1 + D/P).** Lettau and Van Nieuwerburgh (2008) write the steady state exactly, as Gordon growth in gross terms: D/P = (e^μ − e^g)/e^g, where μ = τi + τerp is the log expected gross return and g = τg. Rearranging gives a relation that is linear in the trends with unit loadings:
 
-```latex
+```math
 x_t \equiv \log\!\Big(1 + \frac{D_t}{P_t}\Big) = \tau^{i}_t + \tau^{erp}_t - \tau^{g}_t + c^{x}_t
 ```
 
